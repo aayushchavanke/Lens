@@ -312,10 +312,12 @@ def run_analysis(analysis_id):
                     threat_type = 'Safe Traffic'
 
                 # Build 10D behavior vector from most stable behavioral features
+                # 10 most stable behavioral features for cross-device identity matching
+                # Must use EXACT column names from feature_extractor.py FEATURE_COLUMNS
                 BEHAVIOR_FEATURES = [
                     'flow_duration', 'iat_mean', 'fwd_pkt_len_mean', 'bwd_pkt_len_mean',
                     'flow_bytes_per_sec', 'flow_packets_per_sec', 'fwd_iat_mean',
-                    'bwd_iat_mean', 'down_up_ratio', 'active_mean'
+                    'bwd_iat_mean', 'down_up_ratio', 'active_time_mean'
                 ]
                 bvec = []
                 for f in BEHAVIOR_FEATURES:
@@ -501,26 +503,26 @@ def network_health():
 
 @app.route('/api/train', methods=['POST'])
 def train_model():
-    """Train the weighted behavioral fingerprinting model from the persistent dataset."""
+    """Train the behavioral fingerprinting model on the real-world CICIDS2017 dataset."""
     try:
         import pandas as pd
-        from ml.dataset_generator import generate_dataset
+        from ml.real_dataset_loader import load_real_dataset
         from ml.preprocessor import Preprocessor
         from ml.classifier import BehavioralClassifier
         from ml.model_manager import save_model
 
-        dataset_path = os.path.join(BASE_DIR, 'data', 'training_data.csv')
-        os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
+        data = request.get_json(silent=True) or {}
+        max_rows = data.get('max_rows', 100000)  # Default: 100k rows for fast training
 
-        if os.path.exists(dataset_path):
-            print("[TRAIN] Loading dataset from persistent CSV...")
-            df = pd.read_csv(dataset_path)
-        else:
-            print("[TRAIN] Generating initial dataset...")
-            data = request.get_json(silent=True) or {}
-            n_samples = data.get('n_samples_per_profile', 200)
-            df = generate_dataset(n_samples_per_profile=n_samples)
-            df.to_csv(dataset_path, index=False)
+        print("[TRAIN] Loading real-world CICIDS2017 dataset...")
+        df = load_real_dataset(max_rows=max_rows)
+
+        # Merge with any accumulated RL feedback data
+        rl_path = os.path.join(BASE_DIR, 'data', 'rl_feedback.csv')
+        if os.path.exists(rl_path):
+            rl_df = pd.read_csv(rl_path)
+            df = pd.concat([df, rl_df], ignore_index=True)
+            print(f"[TRAIN] Merged {len(rl_df)} RL feedback rows into training set.")
 
         preprocessor = Preprocessor()
         X, y = preprocessor.fit_transform(df)
@@ -534,8 +536,11 @@ def train_model():
             'status': 'trained',
             'metrics': metrics,
             'dataset_size': len(df),
+            'data_source': 'CICIDS2017 real-world + RL feedback'
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -559,11 +564,6 @@ def apply_feedback(analysis_id):
 
     try:
         import pandas as pd
-        
-        # 1. Get the extracted features from this analysis
-        # We need to re-extract or load from saved analysis
-        # Luckily, get_analysis(analysis_id) should have the raw flow_analysis. 
-        # But we need the 78 strict features. We'll extract them again from PCAP.
         from core.pcap_parser import parse_pcap
         from core.feature_extractor import extract_features
         
@@ -573,42 +573,42 @@ def apply_feedback(analysis_id):
         if features_df.empty:
             return jsonify({'error': 'No flows to learn from in this PCAP'}), 400
             
-        # 2. Assign the new label to all flows in this PCAP
+        # Assign the analyst-confirmed label
         features_df['label'] = new_label
         
-        # We don't save IP/Mac strings to the ML dataset
-        if 'src_ip' in features_df.columns:
-            features_df = features_df.drop(columns=['src_ip', 'dst_ip', 'src_port', 'dst_port', 'mac_address', 'ja3_hash'], errors='ignore')
+        # Drop non-ML identifier columns
+        features_df = features_df.drop(
+            columns=['src_ip', 'dst_ip', 'src_port', 'dst_port', 'mac_address',
+                     'ja3_hash', 'flow_key', 'protocol'], errors='ignore'
+        )
 
-        # 3. Append to dataset CSV
-        dataset_path = os.path.join(BASE_DIR, 'data', 'training_data.csv')
-        
-        # If it doesn't exist, we must train the base model first
-        if not os.path.exists(dataset_path):
-            from ml.dataset_generator import generate_dataset
-            base_df = generate_dataset(n_samples_per_profile=100)
-            base_df.to_csv(dataset_path, index=False)
-            
-        # Append without writing header if it already exists
-        features_df.to_csv(dataset_path, mode='a', header=not os.path.exists(dataset_path), index=False)
+        # Append to RL feedback layer (separate from the real-world base dataset)
+        os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
+        rl_path = os.path.join(BASE_DIR, 'data', 'rl_feedback.csv')
+        features_df.to_csv(rl_path, mode='a', header=not os.path.exists(rl_path), index=False)
 
-        # 4. Trigger Retraining
+        # Retrain: real-world dataset + all accumulated RL feedback
+        from ml.real_dataset_loader import load_real_dataset
         from ml.preprocessor import Preprocessor
         from ml.classifier import BehavioralClassifier
         from ml.model_manager import save_model
 
-        full_df = pd.read_csv(dataset_path)
-        preprocessor = Preprocessor()
-        X, y = preprocessor.fit_transform(full_df)
+        with dataset_write_lock:
+            base_df = load_real_dataset(max_rows=80000)
+            rl_df = pd.read_csv(rl_path)
+            full_df = pd.concat([base_df, rl_df], ignore_index=True)
 
-        classifier = BehavioralClassifier()
-        metrics = classifier.train(X, y)
-        save_model(classifier, preprocessor, metadata=metrics)
+            preprocessor = Preprocessor()
+            X, y = preprocessor.fit_transform(full_df)
+            classifier = BehavioralClassifier()
+            metrics = classifier.train(X, y)
+            save_model(classifier, preprocessor, metadata=metrics)
         
         return jsonify({
             'status': 'success',
-            'message': f'Model retrained with {len(features_df)} new flows as {new_label}',
-            'dataset_size': len(full_df),
+            'message': f'Model retrained with {len(features_df)} new flows as "{new_label}"',
+            'rl_feedback_total': len(rl_df),
+            'training_set_size': len(full_df),
             'metrics': metrics
         })
 
@@ -859,35 +859,37 @@ def auto_initialize_system():
     from ml.model_manager import model_exists
     
     if not model_exists():
-        print("[*] No model detected. Initiating automated MLOps startup...")
+        print("[*] No model detected. Training on real-world CICIDS2017 dataset...")
         try:
             import pandas as pd
-            from ml.dataset_generator import generate_dataset
+            from ml.real_dataset_loader import load_real_dataset
             from ml.preprocessor import Preprocessor
             from ml.classifier import BehavioralClassifier
             from ml.model_manager import save_model
 
-            dataset_path = os.path.join(BASE_DIR, 'data', 'training_data.csv')
-            os.makedirs(os.path.dirname(dataset_path), exist_ok=True)
+            print("  [->] Loading real-world dataset (this may take ~30s for large files)...")
+            df = load_real_dataset(max_rows=100000)
 
-            if not os.path.exists(dataset_path):
-                print("  [->] Generating base pre-trained dataset...")
-                df = generate_dataset(n_samples_per_profile=150)
-                df.to_csv(dataset_path, index=False)
-            else:
-                print("  [->] Base dataset found. Loading...")
-                df = pd.read_csv(dataset_path)
+            # Merge RL feedback if it exists
+            rl_path = os.path.join(BASE_DIR, 'data', 'rl_feedback.csv')
+            if os.path.exists(rl_path):
+                rl_df = pd.read_csv(rl_path)
+                df = pd.concat([df, rl_df], ignore_index=True)
+                print(f"  [->] Merged {len(rl_df)} RL feedback rows.")
 
-            print("  [->] Training Weighted Random Forest...")
+            print("  [->] Training Weighted Random Forest on real traffic patterns...")
             preprocessor = Preprocessor()
             X, y = preprocessor.fit_transform(df)
 
             classifier = BehavioralClassifier()
             metrics = classifier.train(X, y)
             save_model(classifier, preprocessor, metadata=metrics)
-            print("[✓] MLOps startup complete. System ready to detect threats.")
+            print(f"[✓] Model trained. Accuracy: {metrics.get('cv_mean_accuracy', 'N/A')}")
+            print("[✓] System ready to detect DDoS, botnet, and anomalous traffic.")
         except Exception as e:
-            print(f"[!] Error during automated MLOps startup: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"[!] Error during startup training: {e}")
 
 # ═════════════════════════════════════════════════════════════════════════
 #  RUN
