@@ -232,7 +232,18 @@ export default function Dashboard() {
   };
 
   const downloadReport = (analysisId) => {
-    window.open(`${API}/api/report/${analysisId}`, "_blank");
+    window.location.href = `${API}/api/report/${analysisId}`;
+  };
+
+  const clearAllIdentities = async () => {
+    if (!confirm("⚠️ This will permanently delete ALL tracked identities from the database. Proceed?")) return;
+    try {
+      await fetch(`${API}/api/identities/clear`, { method: "DELETE" });
+      toast.success("All identities cleared. Network is now in a clean state.");
+      refreshData();
+    } catch (e) {
+      toast.error("Failed to clear identities.");
+    }
   };
 
   return (
@@ -392,6 +403,15 @@ export default function Dashboard() {
 
       {/* ─── Identity Tables ──────────────────────────────── */}
       <div className={styles.tablesSection}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.75rem", gridColumn: "1 / -1" }}>
+          <button
+            className="btn btn-danger btn-sm"
+            style={{ fontSize: "0.75rem", padding: "0.35rem 0.75rem" }}
+            onClick={clearAllIdentities}
+          >
+            🗑 Clear All Identities
+          </button>
+        </div>
         <IdentityTable identities={blackUsers} type="black" onAction={refreshData} />
         <IdentityTable identities={whiteUsers} type="white" onAction={refreshData} />
       </div>

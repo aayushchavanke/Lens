@@ -311,6 +311,22 @@ def run_analysis(analysis_id):
                     category = 'white'
                     threat_type = 'Safe Traffic'
 
+                # Build 10D behavior vector from most stable behavioral features
+                BEHAVIOR_FEATURES = [
+                    'flow_duration', 'iat_mean', 'fwd_pkt_len_mean', 'bwd_pkt_len_mean',
+                    'flow_bytes_per_sec', 'flow_packets_per_sec', 'fwd_iat_mean',
+                    'bwd_iat_mean', 'down_up_ratio', 'active_mean'
+                ]
+                bvec = []
+                for f in BEHAVIOR_FEATURES:
+                    # Try exact match, then partial match
+                    val = None
+                    for col in features_df.columns:
+                        if f in col.lower().replace(' ', '_'):
+                            val = row.get(col, 0.0)
+                            break
+                    bvec.append(float(val) if val is not None else 0.0)
+
                 identity_id = upsert_identity(
                     src_ip=src_ip,
                     dst_ip=dst_ip,
@@ -319,6 +335,7 @@ def run_analysis(analysis_id):
                     confidence=pred['confidence'],
                     ja3_hash=ja3_hash,
                     analysis_id=analysis_id,
+                    behavior_vector=bvec,
                 )
 
                 pred['identity_id'] = identity_id
@@ -651,12 +668,23 @@ def apply_bulk_feedback():
                 
             features_df.to_csv(dataset_path, mode='a', header=not os.path.exists(dataset_path), index=False)
     
-            # Trigger Single Retrain
+            # Trigger Single Retrain — sliding window over last 5000 rows to keep model fresh
             from ml.preprocessor import Preprocessor
             from ml.classifier import BehavioralClassifier
             from ml.model_manager import save_model
     
             full_df = pd.read_csv(dataset_path)
+            
+            # Cap to most recent 5000 rows — newer data should dominate
+            SLIDING_WINDOW = 5000
+            if len(full_df) > SLIDING_WINDOW:
+                full_df = full_df.tail(SLIDING_WINDOW).reset_index(drop=True)
+                print(f"[RL] Using sliding window: last {SLIDING_WINDOW} samples")
+
+            # Label distribution for analyst feedback
+            label_counts = full_df['label'].value_counts().to_dict() if 'label' in full_df.columns else {}
+            print(f"[RL] Label distribution: {label_counts}")
+
             preprocessor = Preprocessor()
             X, y = preprocessor.fit_transform(full_df)
     
@@ -767,7 +795,12 @@ def generate_report(analysis_id):
         return jsonify({'error': 'Analysis not found'}), 404
 
     try:
-        from reports.pdf_report import generate_pdf_report
+        try:
+            from reports.pdf_report import generate_pdf_report
+        except ImportError:
+            return jsonify({'error': 'PDF generation not available. Install reportlab: pip install reportlab'}), 500
+
+        os.makedirs(REPORTS_FOLDER, exist_ok=True)
 
         report_path = generate_pdf_report(
             analysis_id=analysis_id,
@@ -778,6 +811,11 @@ def generate_report(analysis_id):
             metadata=record.get('metadata', {}),
         )
 
+        if not report_path or not os.path.exists(report_path):
+            return jsonify({'error': 'Failed to generate report file'}), 500
+
+        report_path = os.path.abspath(report_path)
+
         return send_file(
             report_path,
             mimetype='application/pdf',
@@ -785,7 +823,17 @@ def generate_report(analysis_id):
             download_name=f'ObsidianLens_Report_{analysis_id}.pdf',
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/identities/clear', methods=['DELETE'])
+def clear_all_identities():
+    """Clear all tracked identities from the database. Useful for fresh captures."""
+    from core.identity_db import clear_all
+    clear_all()
+    return jsonify({'status': 'cleared', 'message': 'All identity records have been permanently deleted.'})
 
 
 # ═════════════════════════════════════════════════════════════════════════
