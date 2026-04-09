@@ -400,48 +400,44 @@ def _ja3_to_numeric(ja3_hash):
         return 0
 
 
-# ─── Feature Columns (for ML — excludes identifiers) ────────────────────
-
+# Feature Columns for ML inference — matches ml/preprocessor.py FEATURE_COLUMNS exactly.
+# 48 features — trimmed to only those genuinely present in CICIDS2017 real dataset.
+# TLS, SPL, Burst, TTL, DNS features are still extracted above for display/XAI
+# but are NOT used in the ML training/inference pipeline.
 FEATURE_COLUMNS = [
-    # 1. Temporal (21)
+    # Temporal — Flow Duration
     'flow_duration',
+    # Overall IAT
     'iat_mean', 'iat_std', 'iat_min', 'iat_max',
+    # Forward IAT
     'fwd_iat_mean', 'fwd_iat_std', 'fwd_iat_min', 'fwd_iat_max',
+    # Backward IAT
     'bwd_iat_mean', 'bwd_iat_std', 'bwd_iat_min', 'bwd_iat_max',
+    # Active / Idle times
     'active_time_mean', 'active_time_std', 'active_time_min', 'active_time_max',
-    'idle_time_mean', 'idle_time_std', 'idle_time_min', 'idle_time_max',
-
-    # 2. Spatial (24)
+    'idle_time_mean',   'idle_time_std',   'idle_time_min',   'idle_time_max',
+    # Spatial — directional packet/byte counts
     'total_fwd_packets', 'total_bwd_packets',
-    'total_fwd_bytes', 'total_bwd_bytes',
+    'total_fwd_bytes',   'total_bwd_bytes',
+    # Forward packet length stats
     'fwd_pkt_len_mean', 'fwd_pkt_len_std', 'fwd_pkt_len_min', 'fwd_pkt_len_max',
+    # Backward packet length stats
     'bwd_pkt_len_mean', 'bwd_pkt_len_std', 'bwd_pkt_len_min', 'bwd_pkt_len_max',
+    # Overall packet size statistics
     'avg_packet_size', 'pkt_len_variance',
-    'spl_1', 'spl_2', 'spl_3', 'spl_4', 'spl_5',
-    'spl_6', 'spl_7', 'spl_8', 'spl_9', 'spl_10',
-
-    # 3. Volumetric & Directional (8)
+    # Volumetric — transfer rates & ratios
     'flow_bytes_per_sec', 'flow_packets_per_sec',
-    'down_up_ratio', 'fwd_bwd_packet_ratio',
-    'burst_count', 'burst_avg_size', 'burst_avg_duration', 'burst_total_packets',
-
-    # 4. TCP/IP & Flags (14)
+    'down_up_ratio',      'fwd_bwd_packet_ratio',
+    # TCP/IP — window sizes
     'init_win_fwd', 'init_win_bwd',
+    # TCP/IP — header lengths
     'fwd_header_len', 'bwd_header_len',
+    # TCP/IP — flag counts
     'fin_flag_count', 'syn_flag_count', 'rst_flag_count',
     'psh_flag_count', 'ack_flag_count', 'urg_flag_count',
-    'ttl_mean', 'ttl_std',
-    'dns_query_count', 'total_packets',
-
-    # 5. Encrypted / TLS (10)
-    'tls_num_ciphersuites', 'tls_num_extensions',
-    'tls_handshake_duration', 'tls_version', 'tls_has_sni',
-    'tls_ext_lengths_mean', 'tls_ext_lengths_std',
-    'tls_cipher_entropy', 'tls_is_resumed', 'tls_has_ja3',
-    'tls_ja3_numeric',
 ]
 
-assert len(FEATURE_COLUMNS) == 78, (
-    f"FEATURE_COLUMNS length mismatch: expected 78, got {len(FEATURE_COLUMNS)}. "
-    "Ensure feature_extractor.py and preprocessor.py are in sync."
+assert len(FEATURE_COLUMNS) == 49, (
+    f"FEATURE_COLUMNS length mismatch: expected 49, got {len(FEATURE_COLUMNS)}. "
+    "Ensure preprocessor.py and feature_extractor.py are in sync."
 )

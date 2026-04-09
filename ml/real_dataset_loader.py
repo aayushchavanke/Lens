@@ -172,50 +172,21 @@ def load_real_dataset(max_rows=None, label_map=None):
 
     print(f"[DATASET] Label distribution:\n{combined['label'].value_counts().to_dict()}")
 
-    # Ensure all FEATURE_COLUMNS exist (fill missing with 0)
-    for col in FEATURE_COLUMNS:
-        if col not in combined.columns:
-            combined[col] = 0
-
-    # SPL columns — not in CICIDS, fill with 0 (they will have zero importance but won't crash)
-    for i in range(1, 11):
-        col = f'spl_{i}'
-        if col not in combined.columns:
-            combined[col] = 0
-
-    # Burst columns — not in CICIDS, fill with 0
-    for col in ['burst_count', 'burst_avg_size', 'burst_avg_duration', 'burst_total_packets']:
-        if col not in combined.columns:
-            combined[col] = 0
-
-    # fwd_bwd_packet_ratio — compute from counts
+    # fwd_bwd_packet_ratio — derivable from CICIDS data
     if 'fwd_bwd_packet_ratio' not in combined.columns:
         combined['fwd_bwd_packet_ratio'] = (
             combined['total_fwd_packets'] / combined['total_bwd_packets'].replace(0, 1)
         )
 
-    # TTL columns — not in CICIDS
-    for col in ['ttl_mean', 'ttl_std']:
-        if col not in combined.columns:
-            combined[col] = 0
-
-    # DNS — not in CICIDS
-    if 'dns_query_count' not in combined.columns:
-        combined['dns_query_count'] = 0
-
-    # TLS columns — not in CICIDS (fill with 0)
-    tls_cols = [
-        'tls_num_ciphersuites', 'tls_num_extensions', 'tls_handshake_duration',
-        'tls_version', 'tls_has_sni', 'tls_ext_lengths_mean', 'tls_ext_lengths_std',
-        'tls_cipher_entropy', 'tls_is_resumed', 'tls_has_ja3', 'tls_ja3_numeric'
-    ]
-    for col in tls_cols:
-        if col not in combined.columns:
-            combined[col] = 0
-
     # Keep only FEATURE_COLUMNS + label
     keep_cols = FEATURE_COLUMNS + ['label']
     combined = combined[[c for c in keep_cols if c in combined.columns]]
+
+    # Ensure all FEATURE_COLUMNS are present (fill any remaining gaps with 0)
+    for col in FEATURE_COLUMNS:
+        if col not in combined.columns:
+            print(f"  [WARN] Feature '{col}' still missing after mapping — filling with 0")
+            combined[col] = 0
 
     # Clean: replace inf/NaN with 0
     combined[FEATURE_COLUMNS] = combined[FEATURE_COLUMNS].replace([np.inf, -np.inf], np.nan)
@@ -231,3 +202,4 @@ def load_real_dataset(max_rows=None, label_map=None):
 
     print(f"[DATASET] Final training shape: {combined.shape}")
     return combined
+

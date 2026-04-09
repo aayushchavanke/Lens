@@ -1,7 +1,12 @@
 """
-BENFET ML - Data Preprocessor (v2)
-Normalizes the 78-feature behavioral vectors using StandardScaler.
+BENFET ML - Data Preprocessor (v3 — Real Dataset Aligned)
+Normalizes behavioral feature vectors using StandardScaler.
 Handles missing/infinite values and encodes categorical fields.
+
+FEATURE SET: 48 features — trimmed from 78 to match CICIDS2017 real dataset.
+Removed 30 permanently-zeroed features (TLS, SPL, Burst, TTL, DNS) that existed
+only in the synthetic generator but have NO real values in CICIDS2017.
+Zeroed features in training data provide zero information gain and add noise.
 """
 
 import numpy as np
@@ -12,52 +17,65 @@ import os
 from config import MODELS_FOLDER, DEFAULT_SCALER_NAME
 
 
-# Feature columns used for ML — must match feature_extractor.FEATURE_COLUMNS
-# These are PURELY behavioral: no IP addresses, no port numbers.
-# 78 features across 5 categories.
+# Feature columns used for ML.
+# 48 features — all present with real values in CICIDS2017.
+# Source: CICIDS2017 column mapping in ml/real_dataset_loader.py
 FEATURE_COLUMNS = [
-    # 1. Temporal (21)
+    # 1. Temporal — Flow Duration (1)
     'flow_duration',
+
+    # 2. Temporal — Overall IAT (4)
     'iat_mean', 'iat_std', 'iat_min', 'iat_max',
+
+    # 3. Temporal — Forward IAT (4)
     'fwd_iat_mean', 'fwd_iat_std', 'fwd_iat_min', 'fwd_iat_max',
+
+    # 4. Temporal — Backward IAT (4)
     'bwd_iat_mean', 'bwd_iat_std', 'bwd_iat_min', 'bwd_iat_max',
+
+    # 5. Temporal — Active / Idle Times (8)
     'active_time_mean', 'active_time_std', 'active_time_min', 'active_time_max',
-    'idle_time_mean', 'idle_time_std', 'idle_time_min', 'idle_time_max',
+    'idle_time_mean',   'idle_time_std',   'idle_time_min',   'idle_time_max',
 
-    # 2. Spatial (24)
+    # 6. Spatial — Directional packet/byte counts (4)
     'total_fwd_packets', 'total_bwd_packets',
-    'total_fwd_bytes', 'total_bwd_bytes',
+    'total_fwd_bytes',   'total_bwd_bytes',
+
+    # 7. Spatial — Forward packet length stats (4)
     'fwd_pkt_len_mean', 'fwd_pkt_len_std', 'fwd_pkt_len_min', 'fwd_pkt_len_max',
+
+    # 8. Spatial — Backward packet length stats (4)
     'bwd_pkt_len_mean', 'bwd_pkt_len_std', 'bwd_pkt_len_min', 'bwd_pkt_len_max',
+
+    # 9. Spatial — Overall packet size statistics (2)
     'avg_packet_size', 'pkt_len_variance',
-    'spl_1', 'spl_2', 'spl_3', 'spl_4', 'spl_5',
-    'spl_6', 'spl_7', 'spl_8', 'spl_9', 'spl_10',
 
-    # 3. Volumetric & Directional (8)
+    # 10. Volumetric — Transfer rates & ratios (4)
     'flow_bytes_per_sec', 'flow_packets_per_sec',
-    'down_up_ratio', 'fwd_bwd_packet_ratio',
-    'burst_count', 'burst_avg_size', 'burst_avg_duration', 'burst_total_packets',
+    'down_up_ratio',      'fwd_bwd_packet_ratio',
 
-    # 4. TCP/IP & Flags (14)
+    # 11. TCP/IP — Window sizes (2)
     'init_win_fwd', 'init_win_bwd',
+
+    # 12. TCP/IP — Header lengths (2)
     'fwd_header_len', 'bwd_header_len',
+
+    # 13. TCP/IP — All 6 flag counts (6)
     'fin_flag_count', 'syn_flag_count', 'rst_flag_count',
     'psh_flag_count', 'ack_flag_count', 'urg_flag_count',
-    'ttl_mean', 'ttl_std',
-    'dns_query_count', 'total_packets',
 
-    # 5. Encrypted / TLS (11)
-    'tls_num_ciphersuites', 'tls_num_extensions',
-    'tls_handshake_duration', 'tls_version', 'tls_has_sni',
-    'tls_ext_lengths_mean', 'tls_ext_lengths_std',
-    'tls_cipher_entropy', 'tls_is_resumed', 'tls_has_ja3',
-    'tls_ja3_numeric',
+    # REMOVED from previous 78-feature set (all were zero in CICIDS2017):
+    # - 10 SPL features (spl_1 through spl_10) — no equivalent in CICIDS
+    # - 4 Burst features (burst_count, burst_avg_size, burst_avg_duration, burst_total_packets)
+    # - 11 TLS features (tls_num_ciphersuites, tls_cipher_entropy, tls_ja3_numeric, etc.)
+    # - ttl_mean, ttl_std, dns_query_count, total_packets, fwd_bwd... — not in CICIDS
 ]
 
-assert len(FEATURE_COLUMNS) == 78, (
-    f"FEATURE_COLUMNS length mismatch: expected 78, got {len(FEATURE_COLUMNS)}. "
-    "Ensure feature_extractor.py and preprocessor.py are in sync."
+assert len(FEATURE_COLUMNS) == 49, (
+    f"FEATURE_COLUMNS length mismatch: expected 49, got {len(FEATURE_COLUMNS)}. "
+    "Ensure real_dataset_loader.py mapping is in sync with this list."
 )
+
 
 
 class Preprocessor:
