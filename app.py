@@ -35,26 +35,37 @@ def add_cors_headers(response):
 
 
 # ─── Analysis Cache ──────────────────────────────────────────────────────
+from collections import OrderedDict
 
-analysis_cache = {}
+class LRUCache:
+    def __init__(self, capacity=50):
+        self.cache = OrderedDict()
+        self.capacity = capacity
+    
+    def get(self, key):
+        if key not in self.cache:
+            return None
+        self.cache.move_to_end(key)
+        return self.cache[key]
+        
+    def put(self, key, value):
+        self.cache[key] = value
+        self.cache.move_to_end(key)
+        if len(self.cache) > self.capacity:
+            self.cache.popitem(last=False)
+            
+    def delete(self, key):
+        if key in self.cache:
+            del self.cache[key]
 
+    def clear(self):
+        self.cache.clear()
 
-def _load_cache_from_disk():
-    if not os.path.exists(ANALYSIS_FOLDER):
-        return
-    for fname in os.listdir(ANALYSIS_FOLDER):
-        if fname.endswith('.json'):
-            aid = fname[:-5]
-            fpath = os.path.join(ANALYSIS_FOLDER, fname)
-            try:
-                with open(fpath, 'r') as f:
-                    analysis_cache[aid] = json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
+analysis_cache = LRUCache(50)
 
-
-_load_cache_from_disk()
-
+# Thread Lock for ML Dataset concurrency
+from threading import Lock
+dataset_write_lock = Lock()
 
 # ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -63,19 +74,23 @@ def allowed_file(filename):
 
 
 def get_analysis(analysis_id):
-    if analysis_id in analysis_cache:
-        return analysis_cache[analysis_id]
+    data = analysis_cache.get(analysis_id)
+    if data:
+        return data
     cache_path = os.path.join(ANALYSIS_FOLDER, f"{analysis_id}.json")
     if os.path.exists(cache_path):
-        with open(cache_path, 'r') as f:
-            data = json.load(f)
-        analysis_cache[analysis_id] = data
-        return data
+        try:
+            with open(cache_path, 'r') as f:
+                data = json.load(f)
+            analysis_cache.put(analysis_id, data)
+            return data
+        except Exception:
+            return None
     return None
 
 
 def save_analysis(analysis_id, data):
-    analysis_cache[analysis_id] = data
+    analysis_cache.put(analysis_id, data)
     cache_path = os.path.join(ANALYSIS_FOLDER, f"{analysis_id}.json")
     with open(cache_path, 'w') as f:
         json.dump(data, f, default=str)
@@ -188,8 +203,7 @@ def delete_analysis_record(analysis_id):
     cache_path = os.path.join(ANALYSIS_FOLDER, f"{analysis_id}.json")
     if os.path.exists(cache_path):
         os.remove(cache_path)
-    if analysis_id in analysis_cache:
-        del analysis_cache[analysis_id]
+    analysis_cache.delete(analysis_id)
         
     return jsonify({'success': True}), 200
 
@@ -206,6 +220,10 @@ XAI_INSIGHTS_DICT = {
     'down/up': 'An imbalanced connection ratio strongly suggests an automated botnet script rigidly fetching commands without standard human interaction delays.',
     'init_win': 'Anomalous initial window bytes are common in forged TCP handshakes used to bypass standard firewall state tracking.',
     'iat': 'Irregular inter-arrival timing (IAT) signatures reveal algorithmic heartbeats attempting to mimic human browsing behavior to evade detection.',
+    'tls_cipher_entropy': 'High TLS cryptography entropy suggests masking software or anomalous encryption wrappers attempting to evade deep packet inspection.',
+    'bwd_pkt_len_max': 'Anomalous backward packet payload size indicating potential unauthorized data ingress from an external vector.',
+    'flow_packets_per_sec': 'Abnormal volume geometry implies automated high-throughput data channeling or brute force tunneling.',
+    'syn_flag': 'Spike in SYN flags directly correlates with aggressive network scanner reconnaissance and enumeration operations.'
 }
 
 def generate_insights(top_features, is_malicious, threat_type):
@@ -412,9 +430,10 @@ def block_identity_endpoint(identity_id):
     for ip in identity.get('associated_ips', []):
         try:
             rule_name = f"OBSIDIAN_BLOCK_{ip}"
-            ps_command = f'netsh advfirewall firewall add rule name="{rule_name}" dir=in action=block remoteip={ip}; netsh advfirewall firewall add rule name="{rule_name}_OUT" dir=out action=block remoteip={ip}'
-            cmd = f'powershell -Command "Start-Process powershell -ArgumentList \'-Command {ps_command}\' -Verb RunAs -WindowStyle Hidden"'
-            subprocess.run(cmd, shell=True, check=False)
+            cmd_in = ['netsh', 'advfirewall', 'firewall', 'add', 'rule', f'name={rule_name}', 'dir=in', 'action=block', f'remoteip={ip}']
+            cmd_out = ['netsh', 'advfirewall', 'firewall', 'add', 'rule', f'name={rule_name}_OUT', 'dir=out', 'action=block', f'remoteip={ip}']
+            subprocess.run(cmd_in, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(cmd_out, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             block_success.append(ip)
         except Exception as e:
             print(f"Failed to elevate firewall block for {ip}: {e}")
@@ -436,9 +455,10 @@ def unblock_identity_endpoint(identity_id):
     for ip in identity.get('associated_ips', []):
         try:
             rule_name = f"OBSIDIAN_BLOCK_{ip}"
-            ps_command = f'netsh advfirewall firewall delete rule name="{rule_name}"; netsh advfirewall firewall delete rule name="{rule_name}_OUT"'
-            cmd = f'powershell -Command "Start-Process powershell -ArgumentList \'-Command {ps_command}\' -Verb RunAs -WindowStyle Hidden"'
-            subprocess.run(cmd, shell=True, check=False)
+            cmd_in = ['netsh', 'advfirewall', 'firewall', 'delete', 'rule', f'name={rule_name}']
+            cmd_out = ['netsh', 'advfirewall', 'firewall', 'delete', 'rule', f'name={rule_name}_OUT']
+            subprocess.run(cmd_in, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(cmd_out, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             unblock_success.append(ip)
         except Exception as e:
             print(f"Failed to elevate firewall unblock for {ip}: {e}")
@@ -623,25 +643,26 @@ def apply_bulk_feedback():
         # Append to CSV precisely once
         dataset_path = os.path.join(BASE_DIR, 'data', 'training_data.csv')
         
-        if not os.path.exists(dataset_path):
-            from ml.dataset_generator import generate_dataset
-            base_df = generate_dataset(n_samples_per_profile=100)
-            base_df.to_csv(dataset_path, index=False)
-            
-        features_df.to_csv(dataset_path, mode='a', header=not os.path.exists(dataset_path), index=False)
-
-        # Trigger Single Retrain
-        from ml.preprocessor import Preprocessor
-        from ml.classifier import BehavioralClassifier
-        from ml.model_manager import save_model
-
-        full_df = pd.read_csv(dataset_path)
-        preprocessor = Preprocessor()
-        X, y = preprocessor.fit_transform(full_df)
-
-        classifier = BehavioralClassifier()
-        metrics = classifier.train(X, y)
-        save_model(classifier, preprocessor, metadata=metrics)
+        with dataset_write_lock:
+            if not os.path.exists(dataset_path):
+                from ml.dataset_generator import generate_dataset
+                base_df = generate_dataset(n_samples_per_profile=100)
+                base_df.to_csv(dataset_path, index=False)
+                
+            features_df.to_csv(dataset_path, mode='a', header=not os.path.exists(dataset_path), index=False)
+    
+            # Trigger Single Retrain
+            from ml.preprocessor import Preprocessor
+            from ml.classifier import BehavioralClassifier
+            from ml.model_manager import save_model
+    
+            full_df = pd.read_csv(dataset_path)
+            preprocessor = Preprocessor()
+            X, y = preprocessor.fit_transform(full_df)
+    
+            classifier = BehavioralClassifier()
+            metrics = classifier.train(X, y)
+            save_model(classifier, preprocessor, metadata=metrics)
         
         return jsonify({
             'status': 'success',
@@ -772,7 +793,21 @@ def generate_report(analysis_id):
 # ═════════════════════════════════════════════════════════════════════════
 
 def auto_initialize_system():
-    """Silently ensure the model and dataset exist on startup."""
+    """Silently ensure the model and dataset exist on startup, and check dependencies."""
+    # Pre-Flight OS Dependency Check
+    import platform
+    if platform.system() == "Windows":
+        try:
+            from scapy.all import conf
+            if not getattr(conf, 'use_pcap', False):
+                print("\n" + "!"*60)
+                print("[CRITICAL WARNING] Npcap capture driver is not installed!")
+                print("Live Packet Capture will SILENTLY FAIL in production.")
+                print("Please download and install Npcap from: https://npcap.com/#download")
+                print("!"*60 + "\n")
+        except ImportError:
+            print("\n[CRITICAL WARNING] Scapy is not installed. Networking functions will fail.\n")
+
     from ml.model_manager import model_exists
     
     if not model_exists():
