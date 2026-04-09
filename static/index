@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BENFET — Forensic Command Center</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="logo-box"><i class="ph-bold ph-shield-check"></i></div>
+                <h1>BENFET</h1>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-tab="dashboard" onclick="selectTab('dashboard')">
+                    <i class="ph ph-squares-four"></i> Dashboard
+                </button>
+                <div class="nav-divider">Data Sources</div>
+                <button class="nav-item" data-tab="capture" onclick="selectTab('capture')">
+                    <i class="ph ph-activity"></i> Live Capture
+                </button>
+                <button class="nav-item" data-tab="upload" onclick="selectTab('upload')">
+                    <i class="ph ph-upload-simple"></i> Upload PCAP
+                </button>
+                <div class="nav-divider">Investigation</div>
+                <button class="nav-item" data-tab="analysis" onclick="selectTab('analysis')">
+                    <i class="ph ph-chart-bar"></i> Analysis
+                </button>
+                <button class="nav-item" data-tab="predict" onclick="selectTab('predict')">
+                    <i class="ph ph-brain"></i> Predictions
+                </button>
+                <button class="nav-item" data-tab="topology" onclick="selectTab('topology')">
+                    <i class="ph ph-graph"></i> Topology
+                </button>
+                <button class="nav-item" data-tab="behavioral" onclick="selectTab('behavioral')">
+                    <i class="ph ph-crosshair"></i> Behavioral
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div id="model-badge" class="model-status-card warning">
+                    <div class="status-icon"><i class="ph-fill ph-warning-circle"></i></div>
+                    <div class="status-info">
+                        <span class="status-title">AI Engine</span>
+                        <span class="status-desc">No Model Trained</span>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-full mt-2" onclick="trainModelNow()">
+                    <i class="ph-bold ph-lightning"></i> Train Engine
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-header">
+                <h2 id="current-view-title">Executive Dashboard</h2>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="loadDashboard()">
+                        <i class="ph ph-arrows-clockwise"></i> Refresh Sync
+                    </button>
+                </div>
+            </header>
+
+            <div class="workspace">
+                <div id="tab-dashboard" class="tab-pane active">
+                    <div class="bento-grid">
+                        <div class="bento-card col-span-2">
+                            <h3><i class="ph ph-hard-drives"></i> Total Analyses</h3>
+                            <div class="stat-val" id="analyses-count">0</div>
+                            <p class="stat-sub">Historical forensic captures</p>
+                        </div>
+                        <div class="bento-card">
+                            <h3><i class="ph ph-target"></i> Threat Profiles</h3>
+                            <div class="stat-val text-accent" id="profiles-count">8</div>
+                        </div>
+                        <div class="bento-card">
+                            <h3><i class="ph ph-faders"></i> Extracted Features</h3>
+                            <div class="stat-val text-cyan" id="features-count">78</div>
+                        </div>
+                        <div class="bento-card col-span-4 capture-quick-start">
+                            <div class="quick-start-content">
+                                <h3>Ready for Investigation</h3>
+                                <p>Initialize a live interface capture or upload an existing evidence file (.pcap) to begin feature extraction.</p>
+                                <div class="btn-group">
+                                    <button class="btn btn-accent" onclick="selectTab('capture')">Start Live Sniffing</button>
+                                    <button class="btn btn-secondary" onclick="selectTab('upload')">Upload Evidence</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-capture" class="tab-pane">
+                    <div class="form-card max-w-3xl">
+                        <h3 class="card-title">Live Packet Sniffer</h3>
+                        <div class="form-row">
+                            <div class="form-group col-2">
+                                <label for="iface">Target Interface</label>
+                                <select id="iface" class="input"></select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="dur">Duration (sec)</label>
+                                <input type="number" id="dur" class="input" value="30" min="5" max="300">
+                            </div>
+                            <div class="form-group">
+                                <label for="maxpkts">Packet Limit</label>
+                                <input type="number" id="maxpkts" class="input" value="5000" min="100">
+                            </div>
+                        </div>
+                        <button class="btn btn-accent btn-large mt-4" id="capture-btn" onclick="startLiveCapture()">
+                            <i class="ph-bold ph-record"></i> Initialize Capture
+                        </button>
+                        <div id="capture-msg" class="msg-box" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <div id="tab-upload" class="tab-pane">
+                    <div class="form-card max-w-3xl center-card">
+                        <div id="upload-drop" class="drop-zone" ondrop="handleUpload(event)" ondragover="event.preventDefault()" ondragenter="this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')">
+                            <div class="drop-icon"><i class="ph ph-file-arrow-up"></i></div>
+                            <h3>Upload Packet Capture</h3>
+                            <p>Drag & drop your .pcap, .pcapng, or .cap file here</p>
+                            <button class="btn btn-secondary mt-2" onclick="document.getElementById('file-input').click()">Browse Directory</button>
+                            <input type="file" id="file-input" accept=".pcap,.pcapng,.cap" style="display:none" onchange="uploadPCAP(this.files[0])">
+                        </div>
+                        <div id="upload-actions" class="action-panel" style="display:none;">
+                            <div class="upload-status-flex">
+                                <i class="ph-fill ph-check-circle text-success"></i>
+                                <p id="upload-status"></p>
+                            </div>
+                            <button id="run-analysis-btn" class="btn btn-accent btn-full mt-2" onclick="runAnalysisFromUpload()">Execute Deep Analysis</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-analysis" class="tab-pane"><div id="analysis-content"><div class="empty-state"><i class="ph ph-chart-bar"></i><p>Awaiting data telemetry...</p></div></div></div>
+                <div id="tab-predict" class="tab-pane"><div id="predict-content"><div class="empty-state"><i class="ph ph-brain"></i><p>Awaiting model inference...</p></div></div></div>
+                <div id="tab-topology" class="tab-pane">
+                    <div class="topology-container"><svg id="topology-svg"></svg></div>
+                </div>
+                <div id="tab-behavioral" class="tab-pane"><div id="behavioral-content"><div class="empty-state"><i class="ph ph-crosshair"></i><p>Awaiting behavioral vectors...</p></div></div></div>
+
+            </div>
+        </main>
+    </div>
+    <div id="toast" class="toast-box"></div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

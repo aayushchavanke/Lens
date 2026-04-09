@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BENFET — Behavioral Fingerprinting</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <div class="navbar-logo">
+                <div class="logo-box">B</div>
+                <h1>BENFET</h1>
+            </div>
+            <div class="navbar-actions">
+                <span id="model-badge" class="badge warning">⚠️ No Model</span>
+                <button class="btn btn-primary" onclick="trainModelNow()">🧠 Train</button>
+                <button class="btn btn-secondary" onclick="loadDashboard()">🔄 Refresh</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- STATS ROW -->
+    <section class="stats-row">
+        <div class="stat">
+            <div class="stat-val" id="analyses-count">0</div>
+            <div class="stat-lbl">Analyses</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" id="model-status-val">—</div>
+            <div class="stat-lbl">Model</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" id="profiles-count">8</div>
+            <div class="stat-lbl">Profiles</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" id="features-count">78</div>
+            <div class="stat-lbl">Features</div>
+        </div>
+    </section>
+
+    <!-- TABS -->
+    <div class="tabs-nav">
+        <button class="tabs-btn active" data-tab="capture" onclick="selectTab('capture')">📡 Capture</button>
+        <button class="tabs-btn" data-tab="upload" onclick="selectTab('upload')">📁 Upload</button>
+        <button class="tabs-btn" data-tab="analysis" onclick="selectTab('analysis')">📊 Analysis</button>
+        <button class="tabs-btn" data-tab="predict" onclick="selectTab('predict')">🔮 Predict</button>
+        <button class="tabs-btn" data-tab="topology" onclick="selectTab('topology')">🌐 Topology</button>
+        <button class="tabs-btn" data-tab="behavioral" onclick="selectTab('behavioral')">🎯 Behavioral</button>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="tabs-content">
+        <!-- CAPTURE TAB -->
+        <div id="tab-capture" class="tab-pane active">
+            <h2>📡 Live Packet Capture</h2>
+            <div class="form-card">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="iface">Network Interface:</label>
+                        <select id="iface" class="input"></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dur">Duration (seconds):</label>
+                        <input type="number" id="dur" class="input" value="30" min="5" max="300">
+                    </div>
+                    <div class="form-group">
+                        <label for="maxpkts">Max Packets:</label>
+                        <input type="number" id="maxpkts" class="input" value="5000" min="100">
+                    </div>
+                </div>
+                <button class="btn btn-large" id="capture-btn" onclick="startLiveCapture()">▶ START CAPTURE</button>
+                <div id="capture-msg" class="msg-box" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- UPLOAD TAB -->
+        <div id="tab-upload" class="tab-pane">
+            <h2>📁 Upload PCAP File</h2>
+            <div id="upload-drop" class="drop-zone" ondrop="handleUpload(event)" ondragover="event.preventDefault()" ondragenter="this.style.opacity='0.7'" ondragleave="this.style.opacity='1'">
+                <p>📄 Drag PCAP file here or click below</p>
+                <button class="btn btn-secondary" onclick="document.getElementById('file-input').click()">Browse Files</button>
+                <input type="file" id="file-input" accept=".pcap,.pcapng,.cap" style="display:none" onchange="uploadPCAP(this.files[0])">
+            </div>
+            <div id="upload-actions" style="display:none; margin-top: 20px; padding: 15px; background: #1a1a1a; border-radius: 8px; border-left: 4px solid #00d4ff;">
+                <p id="upload-status" style="margin: 0 0 15px 0; color: #aaa;"></p>
+                <button id="run-analysis-btn" class="btn btn-accent" onclick="runAnalysisFromUpload()">⚡ Run Analysis</button>
+            </div>
+        </div>
+
+        <!-- ANALYSIS TAB  -->
+        <div id="tab-analysis" class="tab-pane">
+            <h2>📊 Analysis Results</h2>
+            <div id="analysis-content">
+                <p class="placeholder">No analysis yet. Upload or capture traffic first.</p>
+            </div>
+        </div>
+
+        <!-- PREDICT TAB -->
+        <div id="tab-predict" class="tab-pane">
+            <h2>🔮 Predictions & Explanations</h2>
+            <div id="predict-content">
+                <p class="placeholder">No predictions yet.</p>
+            </div>
+        </div>
+
+        <!-- TOPOLOGY TAB -->
+        <div id="tab-topology" class="tab-pane">
+            <h2>🌐 Network Topology</h2>
+            <svg id="topology-svg" style="width:100%;height:600px;border:1px solid #333;background:#111;"></svg>
+        </div>
+
+        <!-- BEHAVIORAL TAB -->
+        <div id="tab-behavioral" class="tab-pane">
+            <h2>🎯 Behavioral Persistence</h2>
+            <div id="behavioral-content">
+                <p class="placeholder">Loading behavioral analysis...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast" class="toast-box"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
