@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BENFET Forensic Report — {{ analysis_id }}</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --accent: #58a6ff;
+            --accent2: #bc8cff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --danger: #f85149;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+        .report-header {
+            text-align: center;
+            padding: 2rem;
+            background: linear-gradient(135deg, #1a1e2e, #0d1117);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 2rem;
+        }
+        .report-header h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .report-header .meta {
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        .section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .section h2 {
+            color: var(--accent);
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+        }
+        th, td {
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+        th {
+            color: var(--accent);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        tr:hover { background: rgba(88, 166, 255, 0.05); }
+        .confidence-bar {
+            display: inline-block;
+            height: 8px;
+            border-radius: 4px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-success { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+        .badge-warning { background: rgba(210, 153, 34, 0.2); color: var(--warning); }
+        .badge-danger { background: rgba(248, 81, 73, 0.2); color: var(--danger); }
+        .feature-bar {
+            display: flex;
+            align-items: center;
+            margin: 0.3rem 0;
+        }
+        .feature-bar .name {
+            width: 200px;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+        .feature-bar .bar {
+            flex: 1;
+            height: 12px;
+            background: var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .feature-bar .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            border-radius: 6px;
+        }
+        .feature-bar .pct {
+            width: 50px;
+            text-align: right;
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-left: 0.5rem;
+        }
+        .narrative {
+            background: rgba(88, 166, 255, 0.05);
+            border-left: 3px solid var(--accent);
+            padding: 1rem;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.9rem;
+            white-space: pre-line;
+        }
+        .footer {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.8rem;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        @media print {
+            body { background: #fff; color: #000; }
+            .section { border: 1px solid #ccc; }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-header">
+        <h1>🔬 BENFET Forensic Report</h1>
+        <div class="meta">
+            Analysis ID: {{ analysis_id }} &nbsp;|&nbsp; Generated: {{ generated_at }}
+        </div>
+    </div>
+
+    <!-- Traffic Analysis Summary -->
+    <div class="section">
+        <h2>📊 Traffic Analysis Summary</h2>
+        {% if analysis and analysis.protocol_distribution %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Protocol</th>
+                    <th>Packets</th>
+                    <th>Bytes</th>
+                    <th>Packet %</th>
+                    <th>Byte %</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for proto in analysis.protocol_distribution %}
+                <tr>
+                    <td>{{ proto.protocol }}</td>
+                    <td>{{ proto.packet_count }}</td>
+                    <td>{{ proto.byte_count }}</td>
+                    <td>{{ (proto.packet_ratio * 100)|round(1) }}%</td>
+                    <td>{{ (proto.byte_ratio * 100)|round(1) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--muted)">No protocol distribution data available.</p>
+        {% endif %}
+    </div>
+
+    <!-- Top Flows -->
+    <div class="section">
+        <h2>🔗 Top Network Flows</h2>
+        {% if analysis and analysis.flow_summaries %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Flow</th>
+                    <th>Protocol</th>
+                    <th>Packets</th>
+                    <th>Bytes</th>
+                    <th>Duration (s)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for flow in analysis.flow_summaries[:15] %}
+                <tr>
+                    <td style="font-family: monospace; font-size: 0.8rem;">{{ flow.flow }}</td>
+                    <td>{{ flow.protocol }}</td>
+                    <td>{{ flow.total_packets }}</td>
+                    <td>{{ flow.total_bytes }}</td>
+                    <td>{{ flow.duration }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--muted)">No flow data available.</p>
+        {% endif %}
+    </div>
+
+    <!-- User Attribution / Predictions -->
+    {% if has_predictions %}
+    <div class="section">
+        <h2>🎯 User Attribution Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Flow / Sample</th>
+                    <th>Predicted Profile</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pred in predictions %}
+                <tr>
+                    <td>#{{ loop.index }}</td>
+                    <td>
+                        <span class="badge {% if pred.confidence > 0.8 %}badge-success{% elif pred.confidence > 0.5 %}badge-warning{% else %}badge-danger{% endif %}">
+                            {{ pred.prediction }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="confidence-bar" style="width: {{ (pred.confidence * 100)|int }}px; background: {% if pred.confidence > 0.8 %}var(--success){% elif pred.confidence > 0.5 %}var(--warning){% else %}var(--danger){% endif %};"></span>
+                        {{ (pred.confidence * 100)|round(1) }}%
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- XAI Explanations -->
+    {% if has_explanations %}
+    <div class="section">
+        <h2>🧠 Explainable AI — Feature Analysis</h2>
+        {% for exp in explanations[:5] %}
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="font-size: 0.95rem; color: var(--accent2); margin-bottom: 0.5rem;">
+                Sample #{{ loop.index }}: {{ exp.prediction }} ({{ (exp.confidence * 100)|round(1) }}%)
+            </h3>
+            {% for feat in exp.top_features[:8] %}
+            <div class="feature-bar">
+                <span class="name">{{ feat.feature }}</span>
+                <div class="bar">
+                    <div class="bar-fill" style="width: {{ (feat.importance * 100)|round(1) }}%"></div>
+                </div>
+                <span class="pct">{{ (feat.importance * 100)|round(1) }}%</span>
+            </div>
+            {% endfor %}
+            {% if exp.explanation_text %}
+            <div class="narrative" style="margin-top: 0.75rem;">{{ exp.explanation_text }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Network Topology -->
+    {% if has_topology %}
+    <div class="section">
+        <h2>🌐 Network Topology Summary</h2>
+        <table>
+            <tr><td>Total Nodes</td><td><strong>{{ topology.stats.total_nodes }}</strong></td></tr>
+            <tr><td>Total Links</td><td><strong>{{ topology.stats.total_links }}</strong></td></tr>
+            <tr><td>Subnets Detected</td><td><strong>{{ topology.stats.total_subnets }}</strong></td></tr>
+            <tr>
+                <td>Hub Nodes</td>
+                <td>
+                    {% for hub in topology.stats.hub_nodes %}
+                    <span class="badge badge-warning">{{ hub }}</span>
+                    {% endfor %}
+                    {% if not topology.stats.hub_nodes %}
+                    <span style="color: var(--muted)">None detected</span>
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- DNS Analysis -->
+    {% if analysis and analysis.dns_analysis %}
+    <div class="section">
+        <h2>🔍 DNS Analysis</h2>
+        <table>
+            <tr><td>Total DNS Queries</td><td><strong>{{ analysis.dns_analysis.total_dns_queries }}</strong></td></tr>
+            <tr><td>DNS / Total Packet Ratio</td><td><strong>{{ (analysis.dns_analysis.dns_ratio * 100)|round(2) }}%</strong></td></tr>
+        </table>
+        {% if analysis.dns_analysis.dns_sources %}
+        <h3 style="font-size: 0.9rem; color: var(--muted); margin-top: 1rem;">Top DNS Sources</h3>
+        <table>
+            <thead><tr><th>Source IP</th><th>DNS Queries</th></tr></thead>
+            <tbody>
+                {% for ip, count in analysis.dns_analysis.dns_sources.items() %}
+                <tr><td style="font-family: monospace;">{{ ip }}</td><td>{{ count }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        BENFET — Behavioral Fingerprinting for Network Forensics in Encrypted Traffic<br>
+        This report was auto-generated for forensic investigation purposes.
+    </div>
+</body>
+</html>

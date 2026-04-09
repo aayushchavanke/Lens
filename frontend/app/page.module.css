@@ -1,0 +1,227 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 1.5rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.brand {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.brandSub {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* ─── Health + Ingestion Row ─────────────────────────────── */
+
+.topRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.healthCard {
+  display: flex;
+  align-items: center;
+}
+
+.ingestionCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ingestionCard h3 {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.captureRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.captureInfo {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+/* ─── Identity Tables ────────────────────────────────────── */
+
+.tablesSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ─── Model Status Bar ───────────────────────────────────── */
+
+.modelBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  font-size: 0.8125rem;
+}
+
+.modelStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modelDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.modelDotActive {
+  background: var(--white-badge);
+  box-shadow: 0 0 6px var(--white-badge);
+}
+
+.modelDotInactive {
+  background: var(--text-muted);
+}
+
+/* ─── Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .topRow {
+    grid-template-columns: 1fr;
+  }
+  .dashboard {
+    padding: 1rem;
+  }
+}
+
+/* ─── Kebab Menu ─────────────────────────────────────────── */
+
+.kebabContainer {
+  position: relative;
+  display: inline-block;
+}
+
+.kebabButton {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  transition: all 0.2s ease;
+}
+
+.kebabButton:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.kebabMenu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 100;
+  width: max-content;
+  min-width: 200px;
+}
+
+.kebabItem {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0.5rem 1rem;
+  text-align: left;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  transition: all 0.2s ease;
+}
+
+.kebabItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ─── Modal ──────────────────────────────────────────────── */
+
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modalContent {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  width: 90%;
+  max-width: 600px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+}
+
+.modalClose {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  float: right;
+  margin-top: -1rem;
+  margin-right: -1rem;
+}
+
+.modalClose:hover {
+  color: var(--text-primary);
+}
