@@ -148,7 +148,7 @@ def load_real_dataset(max_rows=None, label_map=None):
 
     all_frames = []
     for csv_path in csv_files:
-        print(f"  → Loading: {os.path.basename(csv_path)}")
+        print(f"  -> Loading: {os.path.basename(csv_path)}")
         df = pd.read_csv(csv_path, low_memory=False)
 
         # Strip whitespace from all column names

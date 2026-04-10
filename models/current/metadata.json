@@ -1,31 +1,26 @@
 {
   "name": "benfet_model",
-  "created_at": "2026-04-08T00:38:17.281431",
+  "created_at": "2026-04-11T01:43:00.291474",
   "class_labels": [
-    "BENIGN",
-    "DDoS",
     "apt_exfiltration",
+    "botnet",
     "brute_force_ssh",
-    "cryptominer",
-    "database_sync",
-    "ddos_bot",
-    "email_client",
-    "file_transfer",
-    "gaming",
+    "ddos_attack",
     "malware_c2",
-    "ransomware_transfer",
-    "smart_home_device",
-    "ssh_user",
-    "video_streamer",
-    "voip_user",
-    "vpn_malware_c2",
-    "vpn_user",
+    "port_scan",
     "web_browser"
   ],
   "is_trained": true,
-  "train_accuracy": 1.0,
-  "cv_mean_accuracy": 0.9997,
-  "cv_std": 0.0005,
-  "n_samples": 259745,
-  "n_classes": 19
+  "dataset": "CICIDS2017 (All 8 files)",
+  "n_samples": 200000,
+  "classes": [
+    "apt_exfiltration",
+    "botnet",
+    "brute_force_ssh",
+    "ddos_attack",
+    "malware_c2",
+    "port_scan",
+    "web_browser"
+  ],
+  "cv_accuracy": 0.9984
 }

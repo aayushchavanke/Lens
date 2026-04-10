@@ -4,12 +4,14 @@ import { useRef, useState } from "react";
 const API = "http://127.0.0.1:5000";
 export default function UploadZone({ onUploaded }) {
   const inputRef = useRef(null);
+  const uploadingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState("");
 
   const handleFile = async (file) => {
-    if (!file) return;
+    if (!file || uploadingRef.current) return;
+    uploadingRef.current = true;
     setUploading(true);
     setProgress("Uploading...");
 
@@ -26,21 +28,24 @@ export default function UploadZone({ onUploaded }) {
       if (uploadData.error) {
         setProgress(`Error: ${uploadData.error}`);
         setUploading(false);
+        uploadingRef.current = false;
         return;
       }
 
-      setProgress("Analyzing 78 parameters...");
+      setProgress("Analyzing 49 parameters...");
       const analyzeRes = await fetch(`${API}/api/analyze/${uploadData.analysis_id}`);
       const analyzeData = await analyzeRes.json();
 
       if (analyzeData.error) {
         setProgress(`Analysis error: ${analyzeData.error}`);
         setUploading(false);
+        uploadingRef.current = false;
         return;
       }
 
       setProgress(`Done — ${analyzeData.total_flows} flows, ${analyzeData.identities_created} identities`);
       setUploading(false);
+      uploadingRef.current = false;
 
       if (onUploaded) onUploaded(analyzeData);
     } catch (e) {

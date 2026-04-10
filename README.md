@@ -1,0 +1,191 @@
+# 🔍 The Obsidian Lens
+
+**Enterprise-grade Network Forensic Intelligence Platform**
+
+> A real-time behavioral analysis and threat classification system powered by a Random Forest ML engine trained on the CICIDS2017 dataset. Built for network forensics, threat hunting, and incident response.
+
+---
+
+## ✨ Features
+
+- **49-Parameter Behavioral Fingerprinting** — Extracts real network flow features from PCAP files
+- **7-Class Threat Detection** — DDoS, Port Scan, Brute Force, Botnet, Malware C2, APT Exfiltration, Benign
+- **Live Network Capture** — Real-time packet sniffing with instant classification
+- **Identity Engine v2** — Behavioral codenames, cosine-similarity cross-device tracking, persistent SQLite store
+- **Explainable AI (XAI)** — Per-prediction feature attribution weights
+- **SOAR Integration** — One-click IP blocking via Windows Firewall (`netsh`)
+- **PDF Forensic Reports** — Downloadable per-analysis and batch reports
+- **Dark-Mode Bento Dashboard** — Built with Next.js 15, real-time polling, fully dynamic
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  Next.js Frontend (Port 3000)            │
+│         Dashboard • Identity Tables • Deep Analysis      │
+└───────────────────────┬─────────────────────────────────┘
+                        │ REST API
+┌───────────────────────▼─────────────────────────────────┐
+│                Flask Backend (Port 5000)                 │
+│   PCAP Parser → Feature Extractor → ML Classifier       │
+│   Identity Engine → XAI Engine → SOAR Firewall          │
+└───────────────┬─────────────────────┬────────────────────┘
+                │                     │
+     ┌──────────▼──────┐    ┌─────────▼──────────┐
+     │  Random Forest   │    │  SQLite Identity DB │
+     │  (49 features,   │    │  (Behavioral        │
+     │   7 classes)     │    │   Fingerprints)     │
+     └─────────────────┘    └────────────────────┘
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- **Windows Administrator** privileges (required for live capture + firewall SOAR)
+
+### 1. Clone & Install Dependencies
+
+```bash
+git clone https://github.com/aayushchavanke/Lens.git
+cd Lens
+
+# Backend
+pip install -r requirements.txt
+
+# Frontend
+cd frontend
+npm install
+cd ..
+```
+
+### 2. Add the Dataset
+
+Download [CICIDS2017 from Kaggle](https://www.kaggle.com/datasets/evanblaise/cic-ids-2017) and place all 8 CSV files into:
+
+```
+datasets/real_world/
+├── Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv
+├── Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv
+├── Friday-WorkingHours-Morning.pcap_ISCX.csv
+├── Monday-WorkingHours.pcap_ISCX.csv
+├── Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv
+├── Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv
+├── Tuesday-WorkingHours.pcap_ISCX.csv
+└── Wednesday-workingHours.pcap_ISCX.csv
+```
+
+### 3. Train the Model
+
+```bash
+python retrain_model.py
+```
+
+This trains a Random Forest on all 8 CSV files (~200k flows) and saves the model to `models/current/`.
+
+**Expected output:**
+```
+Training Accuracy : 99.97%
+CV Accuracy       : 99.84% (±0.02%)
+Classes Learned   : 7
+```
+
+### 4. Start the Platform
+
+```bash
+# Terminal 1 — Backend (run as Administrator for SOAR)
+python app.py
+
+# Terminal 2 — Frontend
+cd frontend
+npm run dev
+```
+
+Open **http://localhost:3000**
+
+---
+
+## 🧠 ML Model Details
+
+| Property | Value |
+|----------|-------|
+| Algorithm | Random Forest (100 estimators) |
+| Features | 49 network flow parameters |
+| Dataset | CICIDS2017 (2.83M real-world flows) |
+| Training Set | 200,000 balanced samples |
+| Train Accuracy | 99.97% |
+| CV Accuracy | 99.84% |
+| Class Weighting | Balanced (handles imbalance) |
+
+### Detected Attack Classes
+| Label | Source in CICIDS2017 |
+|-------|----------------------|
+| `web_browser` | BENIGN traffic |
+| `ddos_attack` | DDoS, DoS Hulk, DoS GoldenEye, DoS slowloris |
+| `port_scan` | PortScan |
+| `brute_force_ssh` | FTP-Patator, SSH-Patator, Web Attack XSS/SQLi/BruteForce |
+| `botnet` | Bot |
+| `malware_c2` | Heartbleed |
+| `apt_exfiltration` | Infiltration |
+
+---
+
+## 📁 Project Structure
+
+```
+Lens/
+├── app.py                    # Flask API server
+├── retrain_model.py          # Standalone model retraining script
+├── config.py                 # Paths and constants
+├── requirements.txt
+│
+├── core/
+│   ├── identity_db.py        # Behavioral identity engine (SQLite + cosine similarity)
+│   ├── live_capture.py       # Scapy-based live packet capture
+│   └── pcap_parser.py        # PCAP → feature extraction
+│
+├── ml/
+│   ├── classifier.py         # Random Forest classifier
+│   ├── preprocessor.py       # StandardScaler + 49 FEATURE_COLUMNS
+│   ├── real_dataset_loader.py # CICIDS2017 ingestion pipeline
+│   └── model_manager.py      # Model save/load/delete
+│
+├── models/
+│   └── current/
+│       ├── classifier.pkl    # Trained model (generated by retrain_model.py)
+│       ├── scaler.pkl        # Fitted StandardScaler
+│       └── metadata.json     # Training run metadata
+│
+├── datasets/
+│   └── real_world/           # Place CICIDS2017 CSVs here
+│
+├── reports/
+│   └── pdf_report.py         # PDF forensic report generator
+│
+└── frontend/                 # Next.js 15 dashboard
+    ├── app/
+    │   ├── page.js           # Main dashboard
+    │   └── analysis/[id]/    # Deep analysis page
+    └── components/
+        ├── UploadZone.js     # PCAP drag-and-drop
+        └── IdentityTable.js  # Threat/whitelist identity tables
+```
+
+---
+
+## 🔒 Security Notes
+
+- The SOAR firewall blocking feature requires **Windows Administrator** privileges
+- The SQLite identity database (`obsidian_identities.db`) is excluded from git — it is auto-created at startup
+- Never commit `classifier.pkl` / `scaler.pkl` to the repo — they are excluded via `.gitignore`. Always regenerate locally.
+
+---
+
+## 📄 License
+
+MIT License — Built for academic and research use.

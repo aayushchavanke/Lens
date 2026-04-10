@@ -225,11 +225,11 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
             feat_table.setStyle(_table_style_compact())
             elements.append(feat_table)
 
-            if exp.get('explanation_text'):
+            if exp.get('insights'):
                 elements.append(Spacer(1, 8))
-                explanation = exp['explanation_text'].replace('\n', '<br/>')
+                explanation = '<br/>• '.join(exp['insights'])
                 elements.append(Paragraph(
-                    f"<b>Analysis:</b> {explanation}",
+                    f"<b>Analysis:</b><br/>• {explanation}",
                     styles['BF_Explanation']
                 ))
             elements.append(Spacer(1, 15))

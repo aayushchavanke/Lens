@@ -114,10 +114,8 @@ export default function Dashboard() {
   // ─── Modals & Kebab Menu ────────────────────────────────
   
   const [openMenuId, setOpenMenuId] = useState(null);
-  const [learningModal, setLearningModal] = useState({ isOpen: false, analysisId: null, label: "" });
   const [analysisModal, setAnalysisModal] = useState({ isOpen: false, data: null, features: [] });
   const [selectedAnalyses, setSelectedAnalyses] = useState([]);
-  const [bulkLabel, setBulkLabel] = useState("");
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) {
@@ -151,57 +149,16 @@ export default function Dashboard() {
 
   const analyzeGroup = () => {
     if (selectedAnalyses.length > 0) {
-      openDeepAnalysis(selectedAnalyses[0]);
+      openDeepAnalysis(selectedAnalyses[0]); // Visualizes the first item's footprint
     }
   };
 
-  const submitBulkFeedback = async () => {
-    if (!bulkLabel || selectedAnalyses.length === 0) return;
-    setTraining(true);
-    const toastId = toast.loading(`Batch retraining model on ${selectedAnalyses.length} captures as ${bulkLabel}...`);
-    try {
-      await fetch(`${API}/api/feedback/bulk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analysis_ids: selectedAnalyses, label: bulkLabel }),
-      });
-      refreshData();
-      toast.success("Batch model successfully retrained!", { id: toastId });
-    } catch (e) {
-      toast.error("Failed to batch retrain model.", { id: toastId });
-    }
-    setTraining(false);
-    setSelectedAnalyses([]);
-    setBulkLabel("");
+  const generateBatchReport = (format) => {
+    if (selectedAnalyses.length === 0) return;
+    window.location.href = `${API}/api/report/batch?ids=${selectedAnalyses.join(',')}&format=${format}`;
   };
 
-  const PROFILES = [
-    "web_browser", "video_streamer", "file_transfer", "voip_user", 
-    "email_client", "gaming", "smart_home_device", "database_sync",
-    "ssh_user", "vpn_user", 
-    "malware_c2", "cryptominer", "ddos_bot", "ransomware_transfer", 
-    "brute_force_ssh", "apt_exfiltration", "vpn_malware_c2"
-  ];
 
-  const submitFeedback = async () => {
-    if (!learningModal.label || !learningModal.analysisId) return;
-    setTraining(true);
-    const toastId = toast.loading("Executing Re-Train Pipeline...");
-    try {
-      await fetch(`${API}/api/feedback/${learningModal.analysisId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: learningModal.label }),
-      });
-      refreshData();
-      toast.success("Model successfully retrained!", { id: toastId });
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to retrain model.", { id: toastId });
-    }
-    setTraining(false);
-    setLearningModal({ isOpen: false, analysisId: null, label: "" });
-  };
 
   const openDeepAnalysis = async (analysisId) => {
     try {
@@ -235,16 +192,7 @@ export default function Dashboard() {
     window.location.href = `${API}/api/report/${analysisId}`;
   };
 
-  const clearAllIdentities = async () => {
-    if (!confirm("⚠️ This will permanently delete ALL tracked identities from the database. Proceed?")) return;
-    try {
-      await fetch(`${API}/api/identities/clear`, { method: "DELETE" });
-      toast.success("All identities cleared. Network is now in a clean state.");
-      refreshData();
-    } catch (e) {
-      toast.error("Failed to clear identities.");
-    }
-  };
+
 
   return (
     <div className={styles.dashboard}>
@@ -255,7 +203,7 @@ export default function Dashboard() {
       <div className={styles.topBar}>
         <div>
           <div className={styles.brand}>THE OBSIDIAN LENS</div>
-          <div className={styles.brandSub}>Network Forensic Tool • 78-Param Behavioral Analysis</div>
+          <div className={styles.brandSub}>Network Forensic Tool • 49-Param Behavioral Analysis</div>
         </div>
         <div className={styles.actions}>
           <button className="btn btn-accent" style={{background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)'}} onClick={refreshData}>
@@ -320,16 +268,24 @@ export default function Dashboard() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", minHeight: "40px" }}>
             <h3 style={{ fontSize: "0.875rem", fontWeight: 600 }}>Recent Analyses</h3>
             {selectedAnalyses.length > 0 && (
-               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem", borderRadius: "100px", border: "1px solid var(--accent-dim)" }}>
-                   <span style={{fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", paddingLeft: "0.5rem"}}>{selectedAnalyses.length} Selected</span>
-                   <button className="btn btn-sm" style={{background:"transparent", border:"1px solid var(--border)", padding:"0.3rem 0.6rem"}} onClick={analyzeGroup}>Analyze</button>
-                   <button className="btn btn-danger btn-sm" style={{padding:"0.3rem 0.6rem"}} onClick={deleteSelected}>Delete</button>
+               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem", borderRadius: "8px", border: "1px solid var(--accent-dim)" }}>
+                   <span style={{fontSize: "0.75rem", fontWeight: 600, color: "var(--accent)", paddingLeft: "0.5rem", paddingRight: "0.5rem"}}>{selectedAnalyses.length} Selected</span>
+                   
                    <div style={{width: "1px", height: "16px", background:"var(--border)", margin: "0 0.2rem"}}></div>
-                   <select className="form-input" style={{padding:"0.3rem 0.6rem", height:"auto", fontSize:"0.75rem", width: "auto"}} value={bulkLabel} onChange={e => setBulkLabel(e.target.value)}>
-                     <option value="">-- Assign Profile --</option>
-                     {PROFILES.map(p => <option key={p} value={p}>{p}</option>)}
-                   </select>
-                   <button className="btn btn-accent btn-sm" style={{padding:"0.3rem 0.6rem"}} onClick={submitBulkFeedback} disabled={!bulkLabel || training}>Auto-Train</button>
+                   
+                   <button className="btn btn-sm" style={{background:"transparent", border:"1px solid var(--border)", padding:"0.4rem 0.75rem", fontWeight: 500}} onClick={analyzeGroup}>
+                     Forensic Analysis 
+                   </button>
+                   
+                   <button className="btn btn-sm" style={{background:"var(--bg-card)", border:"1px solid var(--border)", padding:"0.4rem 0.75rem", fontWeight: 500}} onClick={() => generateBatchReport('pdf')}>
+                     Merged PDF
+                   </button>
+                   
+                   <div style={{width: "1px", height: "16px", background:"var(--border)", margin: "0 0.2rem"}}></div>
+
+                   <button className="btn btn-danger btn-sm" style={{padding:"0.4rem 0.75rem", fontWeight: 500}} onClick={deleteSelected}>
+                     Delete Group
+                   </button>
                </div>
             )}
           </div>
@@ -380,9 +336,6 @@ export default function Dashboard() {
                             <button className={styles.kebabItem} onClick={() => { setOpenMenuId(null); openDeepAnalysis(a.id); }}>
                               Deep Forensic Analysis
                             </button>
-                            <button className={styles.kebabItem} onClick={() => { setOpenMenuId(null); setLearningModal({ isOpen: true, analysisId: a.id, label: "" }); }}>
-                              Initiate Reinforcement Learning
-                            </button>
                             <button className={styles.kebabItem} onClick={() => { setOpenMenuId(null); downloadReport(a.id); }}>
                               Export PDF Report
                             </button>
@@ -403,43 +356,9 @@ export default function Dashboard() {
 
       {/* ─── Identity Tables ──────────────────────────────── */}
       <div className={styles.tablesSection}>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.75rem", gridColumn: "1 / -1" }}>
-          <button
-            className="btn btn-danger btn-sm"
-            style={{ fontSize: "0.75rem", padding: "0.35rem 0.75rem" }}
-            onClick={clearAllIdentities}
-          >
-            🗑 Clear All Identities
-          </button>
-        </div>
         <IdentityTable identities={blackUsers} type="black" onAction={refreshData} />
         <IdentityTable identities={whiteUsers} type="white" onAction={refreshData} />
       </div>
-
-      {/* ─── Reinforcement Learning Modal ──────────────────── */}
-      {learningModal.isOpen && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modalContent}>
-            <button className={styles.modalClose} onClick={() => setLearningModal({ isOpen: false, analysisId: null, label: "" })}>&times;</button>
-            <h2 style={{ marginBottom: "0.5rem" }}>Reinforcement Base Configuration</h2>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
-              Select the confirmed threat identity for this PCAP flow. The 78-parameter footprint will be permanently merged into the neural dataset and the Random Forest weights will be instantly optimized.
-            </p>
-            <select 
-              className="btn btn-sm" 
-              style={{ background: "var(--background)", color: "var(--text)", width: "100%", padding: "0.75rem", marginBottom: "1.5rem", fontSize: "1rem" }}
-              value={learningModal.label}
-              onChange={(e) => setLearningModal({...learningModal, label: e.target.value})}
-            >
-              <option value="" disabled>Select Confirmed Identity Profile...</option>
-              {PROFILES.map(p => <option key={p} value={p}>{p.replace(/_/g, ' ').toUpperCase()}</option>)}
-            </select>
-            <button className="btn btn-accent" style={{ width: "100%", padding: "0.75rem" }} onClick={submitFeedback} disabled={!learningModal.label || training}>
-              {training ? "Executing Re-Train Pipeline..." : "Commit Data & Re-Train Model"}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ─── Deep Forensic Analysis Modal ──────────────────── */}
       {analysisModal.isOpen && analysisModal.data && (

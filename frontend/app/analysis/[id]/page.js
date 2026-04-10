@@ -37,7 +37,7 @@ export default function AnalysisPage({ params }) {
     return (
       <div style={containerStyle}>
         <div className="pulse" style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
-          Analyzing with 78 parameters...
+          Analyzing with 49 parameters...
         </div>
       </div>
     );

@@ -1,24 +1,25 @@
-# IDE and OS Files
+# ─── IDE & OS Files ───────────────────────────────────────────────────────────
 .vscode/
 .idea/
 .DS_Store
 *.swp
 *.swo
+Thumbs.db
 
-# Node.js
+# ─── Node.js ──────────────────────────────────────────────────────────────────
 node_modules/
 npm-debug.log
 yarn-error.log
 yarn.lock
 package-lock.json
 
-# Next.js
+# ─── Next.js ──────────────────────────────────────────────────────────────────
 .next/
 out/
 build/
 .vercel/
 
-# Python
+# ─── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
@@ -28,27 +29,34 @@ env/
 venv/
 .venv/
 pip-log.txt
-pip-delete-this-directory.txt
 
-# Environment variables
+# ─── Environment Variables ────────────────────────────────────────────────────
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Obsidian Lens Specific 
+# ─── Trained Model Files (large binaries — retrain locally with retrain_model.py)
+models/current/classifier.pkl
+models/current/scaler.pkl
+
+# ─── Large Datasets (download from Kaggle CICIDS2017 and place in datasets/real_world/)
+datasets/**/*.csv
+datasets/**/*.pcap
+data/*.csv
+data/*.pcap
+
+# ─── Runtime / Generated Files ────────────────────────────────────────────────
 uploads/
 analysis_cache/
 reports/*.pdf
-models/*.pkl
 
-# Massive Data Files (Git LFS limit exceeded)
-data/*.csv
-datasets/**/*.csv
-datasets/**/*.pcap
-data/*.db
-data/obsidian_identities.db
+# ─── SQLite Database (auto-created at runtime) ────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
 
-# Live testing logs
+# ─── Misc Logs ────────────────────────────────────────────────────────────────
 *.log
+data/

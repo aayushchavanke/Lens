@@ -1,12 +1,11 @@
 """
-The Obsidian Lens — Identity Database v2
+The Obsidian Lens — Identity Database v3
 SQLite-backed persistent storage for behavioral fingerprints.
 
 BEHAVIORAL CODENAME ENGINE:
-- Each new identity receives a unique codename derived from its behavioral cluster
-- Codenames are persistent — if the same behavior is seen from a new device/IP/browser,
-  the system matches it to the existing identity using cosine similarity on a 10D behavior vector
-- Threshold: 0.85 cosine similarity (within ~1 std dev of natural human behavioral variance)
+- Each identity receives a unique codename derived from its behavioral cluster
+- Maps Identities (Users) -> MAC Addresses (Devices) -> IP Addresses (Logical Allocations)
+- Stores full behavioral fingerprints in flat JSON files to keep DB queries ultra-fast.
 """
 
 import sqlite3
@@ -17,16 +16,16 @@ from datetime import datetime
 from config import BASE_DIR
 
 DB_PATH = os.path.join(BASE_DIR, 'obsidian_identities.db')
+FINGERPRINTS_DIR = os.path.join(BASE_DIR, 'data', 'fingerprints')
+os.makedirs(FINGERPRINTS_DIR, exist_ok=True)
 
 # ─── Behavioral Name Components ──────────────────────────────────────────────
-# Adjectives derived from TEMPORAL behavior (IAT, duration, burst patterns)
 TEMPORAL_ADJECTIVES = [
     "Swift", "Shadow", "Silent", "Steady", "Rapid", "Slow", "Erratic", "Calm",
     "Burst", "Idle", "Dark", "Bright", "Dim", "Hollow", "Deep", "Sharp",
     "Ghost", "Echo", "Drift", "Pulse"
 ]
 
-# Nouns derived from VOLUMETRIC / PROTOCOL behavior (payload size, encryption ratio, upload/download)
 VOLUMETRIC_NOUNS = [
     "Tide", "Phantom", "Stone", "Wave", "Cipher", "Veil", "Surge", "Hollow",
     "Flux", "Drift", "Beacon", "Mirage", "Specter", "Raven", "Ridge", "Delta",
@@ -35,7 +34,6 @@ VOLUMETRIC_NOUNS = [
 
 
 def _get_conn():
-    """Get a connection with row_factory for dict-like access."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -44,16 +42,14 @@ def _get_conn():
 
 
 def init_db():
-    """Create tables if they don't exist. Handles schema migration."""
     conn = _get_conn()
     conn.executescript("""
-        CREATE TABLE IF NOT EXISTS identities (
+        CREATE TABLE IF NOT EXISTS users (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            identity_label  TEXT NOT NULL,
+            user_label      TEXT NOT NULL,
             codename        TEXT DEFAULT '',
-            mac_address     TEXT DEFAULT '',
+            fingerprint_file TEXT DEFAULT '',
             ja3_hash        TEXT DEFAULT '',
-            behavior_vector TEXT DEFAULT '',
             category        TEXT NOT NULL DEFAULT 'white',
             threat_type     TEXT DEFAULT 'Safe Traffic',
             is_blocked      INTEGER NOT NULL DEFAULT 0,
@@ -63,42 +59,43 @@ def init_db():
             flow_count      INTEGER DEFAULT 1
         );
 
-        CREATE TABLE IF NOT EXISTS identity_ips (
+        CREATE TABLE IF NOT EXISTS mac_addresses (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            identity_id     INTEGER NOT NULL,
-            ip_address      TEXT NOT NULL,
+            user_id         INTEGER NOT NULL,
+            mac_address     TEXT NOT NULL,
+            first_seen      TEXT NOT NULL,
             last_seen       TEXT NOT NULL,
-            FOREIGN KEY (identity_id) REFERENCES identities(id) ON DELETE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS ip_addresses (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            mac_id          INTEGER NOT NULL,
+            ip_address      TEXT NOT NULL,
+            first_seen      TEXT NOT NULL,
+            last_seen       TEXT NOT NULL,
+            FOREIGN KEY (mac_id) REFERENCES mac_addresses(id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS identity_events (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            identity_id     INTEGER NOT NULL,
+            user_id         INTEGER NOT NULL,
             event_type      TEXT NOT NULL,
             details         TEXT DEFAULT '',
             timestamp       TEXT NOT NULL,
-            FOREIGN KEY (identity_id) REFERENCES identities(id) ON DELETE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_identity_ips_unique
-            ON identity_ips(identity_id, ip_address);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_mac_unique
+            ON mac_addresses(user_id, mac_address);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_ip_unique
+            ON ip_addresses(mac_id, ip_address);
     """)
-
-    # Schema migration: add new columns if they don't exist (for existing databases)
-    existing_cols = [r[1] for r in conn.execute("PRAGMA table_info(identities)").fetchall()]
-    if 'codename' not in existing_cols:
-        conn.execute("ALTER TABLE identities ADD COLUMN codename TEXT DEFAULT ''")
-    if 'behavior_vector' not in existing_cols:
-        conn.execute("ALTER TABLE identities ADD COLUMN behavior_vector TEXT DEFAULT ''")
-
     conn.commit()
     conn.close()
 
 
-# ─── Behavioral Fingerprint Engine ───────────────────────────────────────────
-
 def _cosine_similarity(v1, v2):
-    """Compute cosine similarity between two equal-length numeric vectors."""
     if not v1 or not v2 or len(v1) != len(v2):
         return 0.0
     dot = sum(a * b for a, b in zip(v1, v2))
@@ -109,54 +106,36 @@ def _cosine_similarity(v1, v2):
     return dot / (mag1 * mag2)
 
 
-def _generate_codename(behavior_vector, category):
-    """
-    Generate a human-readable codename from the behavior vector.
-    The adjective is seeded from temporal features (indices 0-4).
-    The noun is seeded from volumetric features (indices 5-9).
-    Malicious identities get a 'dark' prefix.
-    """
-    if not behavior_vector or len(behavior_vector) < 10:
-        import random
-        adj = random.choice(TEMPORAL_ADJECTIVES)
-        noun = random.choice(VOLUMETRIC_NOUNS)
-    else:
-        # Use temporal cluster mean (first 5 dims) to pick adjective
-        temporal_seed = int(abs(sum(behavior_vector[:5]) * 1000)) % len(TEMPORAL_ADJECTIVES)
-        # Use volumetric cluster mean (next 5 dims) to pick noun
-        volumetric_seed = int(abs(sum(behavior_vector[5:10]) * 1000)) % len(VOLUMETRIC_NOUNS)
-        adj = TEMPORAL_ADJECTIVES[temporal_seed]
-        noun = VOLUMETRIC_NOUNS[volumetric_seed]
-
-    if category == 'black':
-        return f"THREAT-{adj}{noun}"
-    return f"{adj}{noun}"
+def _generate_codename(conn):
+    """Generates sequential identities like User001, User002."""
+    row = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
+    count = row['c'] if row else 0
+    return f"User{count + 1:03d}"
 
 
 def find_similar_identity(conn, behavior_vector, threshold=0.85):
-    """
-    Search all known identities for one whose behavior_vector is
-    within cosine similarity threshold of the given vector.
-    Returns identity_id if found, else None.
-    """
     if not behavior_vector:
         return None
 
-    rows = conn.execute(
-        "SELECT id, behavior_vector FROM identities WHERE behavior_vector != '' AND behavior_vector IS NOT NULL"
-    ).fetchall()
+    rows = conn.execute("SELECT id, fingerprint_file FROM users WHERE fingerprint_file != ''").fetchall()
 
     best_id = None
     best_sim = 0.0
 
     for row in rows:
+        filepath = os.path.join(FINGERPRINTS_DIR, row['fingerprint_file'])
+        if not os.path.exists(filepath):
+            continue
         try:
-            stored_vec = json.loads(row['behavior_vector'])
-            sim = _cosine_similarity(behavior_vector, stored_vec)
-            if sim > best_sim:
-                best_sim = sim
-                best_id = row['id']
-        except (json.JSONDecodeError, TypeError):
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+                stored_vec = data.get('behavior_vector')
+                if stored_vec:
+                    sim = _cosine_similarity(behavior_vector, stored_vec)
+                    if sim > best_sim:
+                        best_sim = sim
+                        best_id = row['id']
+        except Exception:
             continue
 
     if best_sim >= threshold:
@@ -165,231 +144,240 @@ def find_similar_identity(conn, behavior_vector, threshold=0.85):
     return None
 
 
-# ─── Identity CRUD ──────────────────────────────────────────────────────
-
-
 def upsert_identity(src_ip, dst_ip, category, threat_type, confidence,
-                    mac_address='', ja3_hash='', analysis_id='', behavior_vector=None):
-    """
-    Insert or update an identity based on behavioral fingerprint.
-    Priority order for matching:
-      1. JA3 hash (cryptographic device fingerprint)
-      2. MAC address (hardware fingerprint)  
-      3. Behavioral vector cosine similarity (cross-device tracking)
-      4. Source IP fallback
-    If no match is found, a new identity with a behavioral codename is created.
-    """
+                    mac_address='', ja3_hash='', analysis_id='', behavior_vector=None, full_features=None):
     conn = _get_conn()
     now = datetime.now().isoformat()
-    identity_id = None
-    bvec_str = json.dumps(behavior_vector) if behavior_vector else ''
+    user_id = None
 
-    # Priority 1: JA3 hash match
+    mac_address = mac_address or ""
+
+    # Priority 1: JA3 Hash Match
     if ja3_hash:
-        row = conn.execute(
-            "SELECT id FROM identities WHERE ja3_hash = ? AND ja3_hash != ''",
-            (ja3_hash,)
-        ).fetchone()
+        row = conn.execute("SELECT id FROM users WHERE ja3_hash = ? AND ja3_hash != ''", (ja3_hash,)).fetchone()
         if row:
-            identity_id = row['id']
-            print(f"[IDENTITY] Matched via JA3 hash → #{identity_id}")
+            user_id = row['id']
 
-    # Priority 2: MAC address match
-    if identity_id is None and mac_address:
-        row = conn.execute(
-            "SELECT id FROM identities WHERE mac_address = ? AND mac_address != ''",
-            (mac_address,)
-        ).fetchone()
+    # Priority 2: MAC Match
+    if user_id is None and mac_address:
+        row = conn.execute("SELECT user_id FROM mac_addresses WHERE mac_address = ? AND mac_address != ''", (mac_address,)).fetchone()
         if row:
-            identity_id = row['id']
-            print(f"[IDENTITY] Matched via MAC address → #{identity_id}")
+            user_id = row['user_id']
 
-    # Priority 3: Behavioral vector cosine similarity (cross-device tracking)
-    if identity_id is None and behavior_vector:
-        identity_id = find_similar_identity(conn, behavior_vector, threshold=0.85)
-        if identity_id:
-            print(f"[IDENTITY] Cross-device match via behavior fingerprint → #{identity_id}")
+    # Priority 3: Cross-device Behavior Vector Cosine Sim
+    if user_id is None and behavior_vector:
+        user_id = find_similar_identity(conn, behavior_vector, threshold=0.85)
 
-    # Priority 4: IP fallback
-    if identity_id is None:
-        row = conn.execute(
-            "SELECT identity_id FROM identity_ips WHERE ip_address = ?",
-            (src_ip,)
-        ).fetchone()
+    # Priority 4: IP Fallback
+    if user_id is None:
+        row = conn.execute("SELECT m.user_id FROM ip_addresses ip JOIN mac_addresses m ON ip.mac_id = m.id WHERE ip.ip_address = ?", (src_ip,)).fetchone()
         if row:
-            identity_id = row['identity_id']
-            print(f"[IDENTITY] Matched via IP address → #{identity_id}")
+            user_id = row['user_id']
 
-    if identity_id is not None:
-        # Update existing identity safely
-        # Don't let a safe classification overwrite a confirmed threat
-        update_vec = bvec_str if bvec_str else 'behavior_vector'
+    fingerprint_filename = ""
+    # Update / Insert Root User
+    if user_id is not None:
+        user_row = conn.execute("SELECT fingerprint_file FROM users WHERE id = ?", (user_id,)).fetchone()
+        fingerprint_filename = user_row['fingerprint_file'] if user_row and user_row['fingerprint_file'] else f"USER_{user_id}.json"
+        
         conn.execute("""
-            UPDATE identities
+            UPDATE users
             SET last_seen = ?,
                 confidence = MAX(confidence, ?),
                 category = CASE WHEN category = 'black' THEN 'black' ELSE ? END,
                 threat_type = CASE WHEN category = 'black' THEN threat_type ELSE ? END,
                 flow_count = flow_count + 1,
-                behavior_vector = CASE WHEN ? != '' THEN ? ELSE behavior_vector END
+                fingerprint_file = ?
             WHERE id = ?
-        """, (now, confidence, category, threat_type, bvec_str, bvec_str, identity_id))
+        """, (now, confidence, category, threat_type, category, fingerprint_filename, user_id))
     else:
-        # Create new identity with behavioral codename
-        codename = _generate_codename(behavior_vector, category)
+        codename = _generate_codename(conn)
 
-        # Ensure codename is unique — add numeric suffix if taken
-        existing = conn.execute(
-            "SELECT id FROM identities WHERE codename = ?", (codename,)
-        ).fetchone()
-        if existing:
-            count = conn.execute("SELECT COUNT(*) as c FROM identities").fetchone()['c']
-            codename = f"{codename}-{count + 1}"
-
+        fingerprint_filename = f"{codename}.json".replace(" ", "_").upper()
+        
         cursor = conn.execute("""
-            INSERT INTO identities
-                (identity_label, codename, mac_address, ja3_hash, behavior_vector,
+            INSERT INTO users
+                (user_label, codename, fingerprint_file, ja3_hash,
                  category, threat_type, confidence, first_seen, last_seen)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (codename, codename, mac_address, ja3_hash, bvec_str,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (codename, codename, fingerprint_filename, ja3_hash,
               category, threat_type, confidence, now, now))
-        identity_id = cursor.lastrowid
-        print(f"[IDENTITY] New identity created: '{codename}' (#{identity_id})")
+        user_id = cursor.lastrowid
+        # Safe filename ensuring unique ID if codename collision somehow bypassed
+        fingerprint_filename = f"USER_{user_id}_{fingerprint_filename}"
+        conn.execute("UPDATE users SET fingerprint_file = ? WHERE id = ?", (fingerprint_filename, user_id))
+        print(f"[IDENTITY] New user identity created: '{codename}' (#{user_id})")
 
-    # Upsert IP mappings (track all IPs this identity ever used)
+    # Upsert JSON File
+    if full_features or behavior_vector:
+        filepath = os.path.join(FINGERPRINTS_DIR, fingerprint_filename)
+        data_to_save = {}
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r') as f:
+                    data_to_save = json.load(f)
+            except Exception:
+                pass
+        
+        if behavior_vector:
+            data_to_save['behavior_vector'] = behavior_vector
+        if full_features:
+            data_to_save['full_features'] = full_features
+        data_to_save['last_updated'] = now
+            
+        with open(filepath, 'w') as f:
+            json.dump(data_to_save, f, indent=4)
+
+    # Upsert MAC Address
+    conn.execute("""
+        INSERT INTO mac_addresses (user_id, mac_address, first_seen, last_seen)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, mac_address) DO UPDATE SET last_seen = ?
+    """, (user_id, mac_address, now, now, now))
+
+    mac_row = conn.execute("SELECT id FROM mac_addresses WHERE user_id = ? AND mac_address = ?", (user_id, mac_address)).fetchone()
+    mac_id = mac_row['id']
+
+    # Upsert IP Addresses mapped to this MAC
     for ip in [src_ip, dst_ip]:
         if ip:
             conn.execute("""
-                INSERT INTO identity_ips (identity_id, ip_address, last_seen)
-                VALUES (?, ?, ?)
-                ON CONFLICT(identity_id, ip_address) DO UPDATE SET last_seen = ?
-            """, (identity_id, ip, now, now))
+                INSERT INTO ip_addresses (mac_id, ip_address, first_seen, last_seen)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(mac_id, ip_address) DO UPDATE SET last_seen = ?
+            """, (mac_id, ip, now, now, now))
 
     # Log event
     conn.execute("""
-        INSERT INTO identity_events (identity_id, event_type, details, timestamp)
+        INSERT INTO identity_events (user_id, event_type, details, timestamp)
         VALUES (?, 'analysis', ?, ?)
-    """, (identity_id,
-          json.dumps({'analysis_id': analysis_id, 'category': category,
-                      'threat_type': threat_type}),
+    """, (user_id,
+          json.dumps({'analysis_id': analysis_id, 'category': category, 'threat_type': threat_type}),
           now))
 
     conn.commit()
     conn.close()
-    return identity_id
+    return user_id
 
 
-def block_identity(identity_id):
-    """Block an identity from the network."""
+def block_identity(user_id):
     conn = _get_conn()
     now = datetime.now().isoformat()
-    conn.execute("UPDATE identities SET is_blocked = 1 WHERE id = ?", (identity_id,))
+    conn.execute("UPDATE users SET is_blocked = 1 WHERE id = ?", (user_id,))
     conn.execute("""
-        INSERT INTO identity_events (identity_id, event_type, details, timestamp)
+        INSERT INTO identity_events (user_id, event_type, details, timestamp)
         VALUES (?, 'blocked', 'Identity blocked by administrator', ?)
-    """, (identity_id, now))
+    """, (user_id, now))
     conn.commit()
     conn.close()
 
 
-def unblock_identity(identity_id):
-    """Unblock an identity."""
+def unblock_identity(user_id):
     conn = _get_conn()
     now = datetime.now().isoformat()
-    conn.execute("UPDATE identities SET is_blocked = 0 WHERE id = ?", (identity_id,))
+    conn.execute("UPDATE users SET is_blocked = 0 WHERE id = ?", (user_id,))
     conn.execute("""
-        INSERT INTO identity_events (identity_id, event_type, details, timestamp)
+        INSERT INTO identity_events (user_id, event_type, details, timestamp)
         VALUES (?, 'unblocked', 'Identity unblocked by administrator', ?)
-    """, (identity_id, now))
+    """, (user_id, now))
     conn.commit()
     conn.close()
 
 
 def get_all_identities():
-    """Get all identities with their associated IPs."""
     conn = _get_conn()
-    rows = conn.execute("""
-        SELECT * FROM identities ORDER BY last_seen DESC
-    """).fetchall()
+    users = conn.execute("SELECT * FROM users ORDER BY last_seen DESC").fetchall()
 
-    identities = []
-    for row in rows:
-        ips = conn.execute("""
-            SELECT ip_address, last_seen FROM identity_ips
-            WHERE identity_id = ? ORDER BY last_seen DESC
-        """, (row['id'],)).fetchall()
+    results = []
+    for u in users:
+        uid = u['id']
+        macs = conn.execute("SELECT id, mac_address FROM mac_addresses WHERE user_id = ?", (uid,)).fetchall()
+        
+        all_ips = set()
+        primary_mac = ""
+        
+        for m in macs:
+            if m['mac_address'] and not primary_mac:
+                primary_mac = m['mac_address']
+            ips = conn.execute("SELECT ip_address FROM ip_addresses WHERE mac_id = ? ORDER BY last_seen DESC", (m['id'],)).fetchall()
+            for ip in ips:
+                all_ips.add(ip['ip_address'])
 
-        identities.append({
-            'id': row['id'],
-            'identity_label': row['codename'] or row['identity_label'],
-            'codename': row['codename'],
-            'mac_address': row['mac_address'],
-            'ja3_hash': row['ja3_hash'],
-            'category': row['category'],
-            'threat_type': row['threat_type'],
-            'is_blocked': bool(row['is_blocked']),
-            'confidence': row['confidence'],
-            'first_seen': row['first_seen'],
-            'last_seen': row['last_seen'],
-            'flow_count': row['flow_count'],
-            'associated_ips': [ip['ip_address'] for ip in ips],
+        results.append({
+            'id': uid,
+            'identity_label': u['codename'] or u['user_label'],
+            'codename': u['codename'],
+            'mac_address': primary_mac, 
+            'ja3_hash': u['ja3_hash'],
+            'category': u['category'],
+            'threat_type': u['threat_type'],
+            'is_blocked': bool(u['is_blocked']),
+            'confidence': u['confidence'],
+            'first_seen': u['first_seen'],
+            'last_seen': u['last_seen'],
+            'flow_count': u['flow_count'],
+            'associated_ips': list(all_ips),
+            'fingerprint_file': u['fingerprint_file']
         })
 
     conn.close()
-    return identities
+    return results
 
 
-def get_identity(identity_id):
-    """Get a single identity with full details."""
+def get_identity(user_id):
     conn = _get_conn()
-    row = conn.execute("SELECT * FROM identities WHERE id = ?", (identity_id,)).fetchone()
-    if not row:
+    u = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not u:
         conn.close()
         return None
 
-    ips = conn.execute(
-        "SELECT ip_address, last_seen FROM identity_ips WHERE identity_id = ?",
-        (identity_id,)
-    ).fetchall()
+    macs = conn.execute("SELECT id, mac_address FROM mac_addresses WHERE user_id = ?", (user_id,)).fetchall()
+    all_ips = set()
+    mac_list = []
+    for m in macs:
+        if m['mac_address']:
+            mac_list.append(m['mac_address'])
+        ips = conn.execute("SELECT ip_address FROM ip_addresses WHERE mac_id = ?", (m['id'],)).fetchall()
+        for ip in ips:
+            all_ips.add(ip['ip_address'])
 
     events = conn.execute(
-        "SELECT * FROM identity_events WHERE identity_id = ? ORDER BY timestamp DESC LIMIT 20",
-        (identity_id,)
+        "SELECT * FROM identity_events WHERE user_id = ? ORDER BY timestamp DESC LIMIT 20",
+        (user_id,)
     ).fetchall()
 
     result = {
-        'id': row['id'],
-        'identity_label': row['codename'] or row['identity_label'],
-        'codename': row['codename'],
-        'mac_address': row['mac_address'],
-        'ja3_hash': row['ja3_hash'],
-        'category': row['category'],
-        'threat_type': row['threat_type'],
-        'is_blocked': bool(row['is_blocked']),
-        'confidence': row['confidence'],
-        'first_seen': row['first_seen'],
-        'last_seen': row['last_seen'],
-        'flow_count': row['flow_count'],
-        'associated_ips': [ip['ip_address'] for ip in ips],
-        'events': [{'event_type': e['event_type'], 'details': e['details'],
-                     'timestamp': e['timestamp']} for e in events],
+        'id': u['id'],
+        'identity_label': u['codename'] or u['user_label'],
+        'codename': u['codename'],
+        'mac_address': mac_list[0] if mac_list else "",
+        'all_macs': mac_list,
+        'ja3_hash': u['ja3_hash'],
+        'category': u['category'],
+        'threat_type': u['threat_type'],
+        'is_blocked': bool(u['is_blocked']),
+        'confidence': u['confidence'],
+        'first_seen': u['first_seen'],
+        'last_seen': u['last_seen'],
+        'flow_count': u['flow_count'],
+        'associated_ips': list(all_ips),
+        'events': [{'event_type': e['event_type'], 'details': e['details'], 'timestamp': e['timestamp']} for e in events],
     }
     conn.close()
     return result
 
 
 def get_network_health():
-    """Compute detailed network health using multi-factor weighted scoring."""
     conn = _get_conn()
-    total = conn.execute("SELECT COUNT(*) as c FROM identities").fetchone()['c']
-    white = conn.execute("SELECT COUNT(*) as c FROM identities WHERE category = 'white'").fetchone()['c']
-    black = conn.execute("SELECT COUNT(*) as c FROM identities WHERE category = 'black'").fetchone()['c']
-    blocked = conn.execute("SELECT COUNT(*) as c FROM identities WHERE is_blocked = 1").fetchone()['c']
-    blocked_white = conn.execute("SELECT COUNT(*) as c FROM identities WHERE category = 'white' AND is_blocked = 1").fetchone()['c']
-    blocked_black = conn.execute("SELECT COUNT(*) as c FROM identities WHERE category = 'black' AND is_blocked = 1").fetchone()['c']
+    total = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()['c']
+    white = conn.execute("SELECT COUNT(*) as c FROM users WHERE category = 'white'").fetchone()['c']
+    black = conn.execute("SELECT COUNT(*) as c FROM users WHERE category = 'black'").fetchone()['c']
+    blocked = conn.execute("SELECT COUNT(*) as c FROM users WHERE is_blocked = 1").fetchone()['c']
+    blocked_white = conn.execute("SELECT COUNT(*) as c FROM users WHERE category = 'white' AND is_blocked = 1").fetchone()['c']
+    blocked_black = conn.execute("SELECT COUNT(*) as c FROM users WHERE category = 'black' AND is_blocked = 1").fetchone()['c']
 
     avg_conf = conn.execute(
-        "SELECT AVG(confidence) as avg_c FROM identities WHERE category = 'black' AND is_blocked = 0"
+        "SELECT AVG(confidence) as avg_c FROM users WHERE category = 'black' AND is_blocked = 0"
     ).fetchone()['avg_c'] or 0.0
     conn.close()
 
@@ -426,16 +414,22 @@ def get_network_health():
 
 
 def clear_all():
-    """Clear all identity data."""
     conn = _get_conn()
     conn.executescript("""
         DELETE FROM identity_events;
-        DELETE FROM identity_ips;
-        DELETE FROM identities;
+        DELETE FROM ip_addresses;
+        DELETE FROM mac_addresses;
+        DELETE FROM users;
     """)
     conn.commit()
     conn.close()
+    
+    # Also clear fingerprints
+    for f in os.listdir(FINGERPRINTS_DIR):
+        if f.endswith('.json'):
+            try:
+                os.remove(os.path.join(FINGERPRINTS_DIR, f))
+            except:
+                pass
 
-
-# Initialize DB on import
 init_db()

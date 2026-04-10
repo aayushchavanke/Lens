@@ -220,7 +220,6 @@ XAI_INSIGHTS_DICT = {
     'down/up': 'An imbalanced connection ratio strongly suggests an automated botnet script rigidly fetching commands without standard human interaction delays.',
     'init_win': 'Anomalous initial window bytes are common in forged TCP handshakes used to bypass standard firewall state tracking.',
     'iat': 'Irregular inter-arrival timing (IAT) signatures reveal algorithmic heartbeats attempting to mimic human browsing behavior to evade detection.',
-    'tls_cipher_entropy': 'High TLS cryptography entropy suggests masking software or anomalous encryption wrappers attempting to evade deep packet inspection.',
     'bwd_pkt_len_max': 'Anomalous backward packet payload size indicating potential unauthorized data ingress from an external vector.',
     'flow_packets_per_sec': 'Abnormal volume geometry implies automated high-throughput data channeling or brute force tunneling.',
     'syn_flag': 'Spike in SYN flags directly correlates with aggressive network scanner reconnaissance and enumeration operations.'
@@ -247,7 +246,7 @@ def generate_insights(top_features, is_malicious, threat_type):
 @app.route('/api/analyze/<analysis_id>', methods=['GET'])
 def run_analysis(analysis_id):
     """
-    Full pipeline: Parse PCAP → Extract 78 features → Classify →
+    Full pipeline: Parse PCAP → Extract 49 features → Classify →
     Categorize White/Black → Store identities in SQLite DB.
     """
     if not _valid_analysis_id(analysis_id):
@@ -338,6 +337,7 @@ def run_analysis(analysis_id):
                     ja3_hash=ja3_hash,
                     analysis_id=analysis_id,
                     behavior_vector=bvec,
+                    full_features=row.to_dict()
                 )
 
                 pred['identity_id'] = identity_id
@@ -372,6 +372,7 @@ def run_analysis(analysis_id):
                     threat_type='Unclassified (No Model)',
                     confidence=0.0,
                     analysis_id=analysis_id,
+                    full_features=row.to_dict()
                 )
                 identities_created.append(identity_id)
 
@@ -402,6 +403,11 @@ def run_analysis(analysis_id):
     except Exception as e:
         print(f"[ERROR] Analysis failed: {str(e)}")
         print(traceback.format_exc())
+        if record:
+            record['status'] = 'failed'
+            record['error_message'] = str(e)
+            record['analyzed_at'] = datetime.now().isoformat()
+            save_analysis(analysis_id, record)
         return jsonify({'error': str(e)}), 500
 
 
@@ -828,12 +834,80 @@ def generate_report(analysis_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/identities/clear', methods=['DELETE'])
-def clear_all_identities():
-    """Clear all tracked identities from the database. Useful for fresh captures."""
-    from core.identity_db import clear_all
-    clear_all()
-    return jsonify({'status': 'cleared', 'message': 'All identity records have been permanently deleted.'})
+@app.route('/api/report/batch', methods=['GET'])
+def generate_batch_report():
+    import zipfile
+    import io
+    from reports.pdf_report import generate_pdf_report
+    
+    ids_str = request.args.get('ids', '')
+    fmt = request.args.get('format', 'zip')
+    
+    if not ids_str:
+        return jsonify({'error': 'No ids provided'}), 400
+        
+    analysis_ids = ids_str.split(',')
+    pdf_paths = []
+    
+    for aid in analysis_ids:
+        record = get_analysis(aid)
+        if not record: continue
+        
+        path = generate_pdf_report(
+            analysis_id=aid,
+            analysis_data=record.get('flow_analysis', {}),
+            predictions=record.get('predictions', []),
+            explanations=record.get('explanations', []),
+            topology={},
+            metadata=record.get('metadata', {}),
+        )
+        if path and os.path.exists(path):
+            pdf_paths.append((aid, path))
+            
+    if not pdf_paths:
+        return jsonify({'error': 'Failed to generate any reports'}), 500
+        
+    if fmt == 'pdf':
+        try:
+            from pypdf import PdfWriter
+        except ImportError:
+            return jsonify({'error': 'pypdf not installed. Please pip install pypdf'}), 500
+            
+        merger = PdfWriter()
+        for _, path in pdf_paths:
+            merger.append(path)
+            
+        merged_path = os.path.join(REPORTS_FOLDER, f"BENFET_Merged_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
+        merger.write(merged_path)
+        merger.close()
+        
+        return send_file(merged_path, mimetype='application/pdf', as_attachment=True, download_name='ObsidianLens_Cumulative_Report.pdf')
+        
+    else: # format == 'zip'
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for aid, path in pdf_paths:
+                zf.write(path, arcname=f"Report_{aid}.pdf")
+        memory_file.seek(0)
+        
+        return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name='ObsidianLens_Cumulative_Reports.zip')
+
+
+@app.route('/api/analysis/clear_all_records', methods=['DELETE'])
+def clear_all_records():
+    """Clear all analysis records from the cache."""
+    try:
+        if os.path.exists(ANALYSIS_FOLDER):
+            for file in os.listdir(ANALYSIS_FOLDER):
+                if file.endswith('.json'):
+                    try:
+                        os.remove(os.path.join(ANALYSIS_FOLDER, file))
+                    except:
+                        pass
+        return jsonify({'status': 'cleared'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 
 # ═════════════════════════════════════════════════════════════════════════

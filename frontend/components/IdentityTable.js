@@ -48,7 +48,7 @@ export default function IdentityTable({ identities = [], type = "white", onActio
                   <td>
                     <div style={{ display: "flex", flexDirection: "column" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "0.8125rem" }}>
-                        {identity.identity_label}
+                        {identity.codename || identity.identity_label}
                       </span>
                       {identity.mac_address && (
                         <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
