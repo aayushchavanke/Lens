@@ -104,7 +104,7 @@ function ForensicPanel({ record, onClose }) {
             {/* ── Most Influential Parameters ── */}
             {topFeatures.length > 0 && (
               <section style={sectionStyle}>
-                <SectionTitle icon="⚡" label="Most Influential Parameters" />
+                <SectionTitle icon="" label="Most Influential Parameters" />
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {topFeatures.slice(0, 10).map(([name, weight], i) => {
                     const pct = ((weight / maxWeight) * 100).toFixed(0);
@@ -136,7 +136,7 @@ function ForensicPanel({ record, onClose }) {
             {/* ── XAI Conclusions ── */}
             {insights.length > 0 && (
               <section style={sectionStyle}>
-                <SectionTitle icon="🧠" label="XAI Conclusions" />
+                <SectionTitle icon="" label="XAI Conclusions" />
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                   {insights.map((insight, i) => {
                     const featureMatch = insight.match(/^\[([^\]]+)\]/);
@@ -173,7 +173,7 @@ function ForensicPanel({ record, onClose }) {
             {/* ── Suggestions ── */}
             {predictions.length > 0 && (
               <section style={sectionStyle}>
-                <SectionTitle icon="💡" label="Analysis Suggestions" />
+                <SectionTitle icon="" label="Analysis Suggestions" />
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {_buildSuggestions(predictions).map((s, i) => (
                     <div key={i} style={{ display: "flex", gap: "0.625rem", alignItems: "flex-start" }}>
@@ -188,7 +188,7 @@ function ForensicPanel({ record, onClose }) {
             {/* ── Flow Classifications ── */}
             {predictions.length > 0 && (
               <section style={sectionStyle}>
-                <SectionTitle icon="🔗" label={`Flow Classifications (${predictions.length})`} />
+                <SectionTitle icon="" label={`Flow Classifications (${predictions.length})`} />
                 <div style={{ overflowX: "auto" }}>
                   <table className="data-table" style={{ fontSize: "0.6875rem" }}>
                     <thead>
@@ -239,7 +239,7 @@ function ForensicPanel({ record, onClose }) {
             onClick={() => window.open(`${API}/api/report/${record.id}`, "_blank")}
             style={{ gap: "0.375rem" }}
           >
-            <span style={{ fontSize: "0.75rem" }}>⬇</span> Export PDF Report
+            <span style={{ fontSize: "0.75rem" }}>[↓]</span> Export PDF Report
           </button>
           <button className="btn btn-sm" style={{ color: "var(--text-muted)" }} onClick={onClose}>
             Close
@@ -283,25 +283,25 @@ function _buildSuggestions(predictions) {
   const suggestions = [];
 
   if (malicious.length > 0) {
-    suggestions.push({ icon: "🔴", text: `${malicious.length} malicious flow${malicious.length > 1 ? "s" : ""} detected. Immediate review of flagged identities is recommended.` });
+    suggestions.push({ icon: "[!]", text: `${malicious.length} malicious flow${malicious.length > 1 ? "s" : ""} detected. Immediate review of flagged identities is recommended.` });
     if (threats.length) {
-      suggestions.push({ icon: "⚠️", text: `Detected threat types: ${threats.join(", ")}. Cross-reference with MITRE ATT&CK framework for attribution.` });
+      suggestions.push({ icon: "[WARN]", text: `Detected threat types: ${threats.join(", ")}. Cross-reference with MITRE ATT&CK framework for attribution.` });
     }
     if (malicious.some(p => p.threat_type?.toLowerCase().includes("ddos"))) {
-      suggestions.push({ icon: "🛡️", text: "DDoS pattern identified. Consider rate-limiting upstream and enabling blackhole routing for persistent source IPs." });
+      suggestions.push({ icon: "[SEC]", text: "DDoS pattern identified. Consider rate-limiting upstream and enabling blackhole routing for persistent source IPs." });
     }
     if (malicious.some(p => p.threat_type?.toLowerCase().includes("botnet") || p.threat_type?.toLowerCase().includes("c2") || p.threat_type?.toLowerCase().includes("beacon"))) {
-      suggestions.push({ icon: "🔍", text: "C2 beacon/botnet behavior detected. Isolate affected endpoints and conduct memory forensics for persistence mechanisms." });
+      suggestions.push({ icon: "[INV]", text: "C2 beacon/botnet behavior detected. Isolate affected endpoints and conduct memory forensics for persistence mechanisms." });
     }
-    suggestions.push({ icon: "📄", text: "Export a full PDF forensic report for court-admissible documentation and chain-of-custody records." });
+    suggestions.push({ icon: "[DOC]", text: "Export a full PDF forensic report for court-admissible documentation and chain-of-custody records." });
   } else {
-    suggestions.push({ icon: "✅", text: "No malicious flows detected. Traffic patterns are within expected behavioral baselines." });
-    suggestions.push({ icon: "📊", text: "Archive this capture as a baseline reference for future anomaly comparison." });
+    suggestions.push({ icon: "[OK]", text: "No malicious flows detected. Traffic patterns are within expected behavioral baselines." });
+    suggestions.push({ icon: "[ARCH]", text: "Archive this capture as a baseline reference for future anomaly comparison." });
   }
 
   const vpnFlows = predictions.filter(p => p.is_vpn);
   if (vpnFlows.length > 0) {
-    suggestions.push({ icon: "🔐", text: `${vpnFlows.length} VPN-masked flow${vpnFlows.length > 1 ? "s" : ""} identified via behavioral fingerprint. These flows bypassed IP-based detection.` });
+    suggestions.push({ icon: "[VPN]", text: `${vpnFlows.length} VPN-masked flow${vpnFlows.length > 1 ? "s" : ""} identified via behavioral fingerprint. These flows bypassed IP-based detection.` });
   }
 
   return suggestions;
@@ -341,7 +341,7 @@ function ActionsMenu({ record, onForensics, onExportPDF, onDelete }) {
             onMouseEnter={e => e.currentTarget.style.background = "var(--card-bg)"}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
           >
-            <span style={{ fontSize: "0.75rem" }}>🔬</span>
+            <span style={{ fontSize: "0.75rem", fontFamily:"var(--font-mono)", fontWeight: 600 }}>[+]</span>
             <div>
               <div style={{ fontSize: "0.8125rem" }}>Forensic Insights</div>
               <div style={{ fontSize: "0.6875rem", color: "var(--text-muted)" }}>XAI conclusions &amp; suggestions</div>
@@ -356,7 +356,7 @@ function ActionsMenu({ record, onForensics, onExportPDF, onDelete }) {
             onMouseEnter={e => e.currentTarget.style.background = "var(--card-bg)"}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
           >
-            <span style={{ fontSize: "0.75rem" }}>📄</span>
+            <span style={{ fontSize: "0.75rem", fontFamily:"var(--font-mono)", fontWeight: 600 }}>[PDF]</span>
             <div>
               <div style={{ fontSize: "0.8125rem" }}>Export PDF</div>
               <div style={{ fontSize: "0.6875rem", color: "var(--text-muted)" }}>Professional forensic report</div>
@@ -371,7 +371,7 @@ function ActionsMenu({ record, onForensics, onExportPDF, onDelete }) {
             onMouseEnter={e => e.currentTarget.style.background = "var(--card-bg)"}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
           >
-            <span style={{ fontSize: "0.75rem" }}>🗑</span>
+            <span style={{ fontSize: "0.75rem", fontFamily:"var(--font-mono)", fontWeight: 600 }}>[X]</span>
             <div style={{ fontSize: "0.8125rem" }}>Delete Record</div>
           </button>
         </div>
@@ -510,17 +510,17 @@ export default function RecordsTable({ records = [], onRefresh }) {
                 {selected.size} selected
               </span>
               <button className="btn btn-sm" onClick={downloadCumulativeReport}>
-                ⬇ Cumulative Report
+                [↓] Cumulative Report
               </button>
               <button
                 className="btn btn-sm"
                 style={{ color: "var(--accent)", borderColor: "var(--accent)" }}
                 onClick={downloadZippedPDFs}
               >
-                🗜 Zipped PDFs
+                [ZIP] Zipped PDFs
               </button>
               <button className="btn btn-sm btn-danger" onClick={bulkDelete}>
-                🗑 Delete Selected
+                [X] Delete Selected
               </button>
             </div>
           )}
@@ -564,7 +564,7 @@ export default function RecordsTable({ records = [], onRefresh }) {
                       </span>
                     </td>
                     <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                      {record.source === "live_capture" ? "🔴 Live Capture" : "📁 Upload"}
+                      {record.source === "live_capture" ? "[LIVE] Live Capture" : "[FILE] Upload"}
                     </td>
                     <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                       {record.uploaded_at

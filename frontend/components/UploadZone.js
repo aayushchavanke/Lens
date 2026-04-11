@@ -83,12 +83,12 @@ export default function UploadZone({ onUploaded }) {
         </div>
       ) : progress ? (
         <div style={{ fontSize: "0.8125rem" }}>
-          <div style={{ color: "var(--white-badge)", marginBottom: "0.25rem" }}>✓ {progress}</div>
+          <div style={{ color: "var(--white-badge)", marginBottom: "0.25rem" }}>[OK] {progress}</div>
           <div style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Click to upload another</div>
         </div>
       ) : (
         <div>
-          <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>📁</div>
+          <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem", fontFamily: "var(--font-mono)", fontWeight: 200 }}>[+]</div>
           <div style={{ fontSize: "0.875rem", fontWeight: 500 }}>Drop PCAP file here</div>
           <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
             .pcap, .pcapng, .cap — up to 100 MB

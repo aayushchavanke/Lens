@@ -252,7 +252,7 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
 
     # Key finding callout
     elements.append(_callout(
-        "⚡ Behavioral Persistence Engine",
+        "[!] Behavioral Persistence Engine",
         "BENFET identifies devices by analyzing <b>78 behavioral dimensions</b> — not IP addresses. "
         "Even when attackers change IPs via VPN or proxy, their behavioral fingerprint remains consistent. "
         "This enables high-confidence identification of cyber criminals across sessions.",
@@ -508,32 +508,32 @@ def _build_suggestions(predictions):
     sug = []
 
     if malicious:
-        sug.append({'icon': '🔴', 'title': 'Immediate Review',
+        sug.append({'icon': '[!]', 'title': 'Immediate Review',
                     'text': f"{len(malicious)} malicious flow{'s' if len(malicious) > 1 else ''} detected. "
                             "Immediate investigation of flagged identities is recommended."})
         if threats:
-            sug.append({'icon': '⚠️', 'title': 'Threat Attribution',
+            sug.append({'icon': '[WARN]', 'title': 'Threat Attribution',
                         'text': f"Detected threat types: {', '.join(threats)}. "
                                 "Cross-reference with MITRE ATT&CK framework for TTP attribution."})
         if any('ddos' in (t.lower() or '') for t in threats):
-            sug.append({'icon': '🛡️', 'title': 'DDoS Mitigation',
+            sug.append({'icon': '[SEC]', 'title': 'DDoS Mitigation',
                         'text': "DDoS pattern identified. Enable rate-limiting upstream and "
                                 "consider blackhole routing for persistent source IPs."})
         if any(k in ' '.join(threats).lower() for k in ['botnet', 'c2', 'beacon', 'rat']):
-            sug.append({'icon': '🔍', 'title': 'C2 / Botnet Response',
+            sug.append({'icon': '[INV]', 'title': 'C2 / Botnet Response',
                         'text': "C2 beacon or botnet behavior detected. Isolate affected endpoints "
                                 "and conduct memory forensics for persistence mechanisms."})
-        sug.append({'icon': '📄', 'title': 'Documentation',
+        sug.append({'icon': '[DOC]', 'title': 'Documentation',
                     'text': "Export this PDF for court-admissible documentation and chain-of-custody records."})
     else:
-        sug.append({'icon': '✅', 'title': 'Traffic Normal',
+        sug.append({'icon': '[OK]', 'title': 'Traffic Normal',
                     'text': "No malicious flows detected. Traffic patterns are within expected behavioral baselines."})
-        sug.append({'icon': '📊', 'title': 'Baseline Archival',
+        sug.append({'icon': '[ARCH]', 'title': 'Baseline Archival',
                     'text': "Archive this capture as a baseline reference for future anomaly comparison."})
 
     vpn = [p for p in predictions if p.get('is_vpn')]
     if vpn:
-        sug.append({'icon': '🔐', 'title': 'VPN-Masked Flows',
+        sug.append({'icon': '[VPN]', 'title': 'VPN-Masked Flows',
                     'text': f"{len(vpn)} VPN-masked flow{'s' if len(vpn) > 1 else ''} identified via behavioral fingerprint, "
                             "bypassing standard IP-based detection."})
     return sug
