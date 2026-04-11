@@ -1,197 +1,283 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import toast, { Toaster } from "react-hot-toast";
-import styles from "./page.module.css";
-import HealthScore from "../components/HealthScore";
-import IdentityTable from "../components/IdentityTable";
-import UploadZone from "../components/UploadZone";
-import RecordsTable from "../components/RecordsTable";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import styles from "./intro.module.css";
 
-const API = "http://127.0.0.1:5000";
+const FEATURE_PILLS = [
+  { icon: "49", label: "Behavioral Features" },
+  { icon: "TLS", label: "Encrypted Traffic Ready" },
+  { icon: "IP", label: "Pivot Tracking" },
+  { icon: "RT", label: "Real-Time Blocking" },
+];
 
-export default function Dashboard() {
-  const router = useRouter();
-  const [health, setHealth] = useState({ health_score: 100, white_count: 0, black_count: 0, blocked_count: 0, active_threats: 0, total_identities: 0 });
-  const [whiteUsers, setWhiteUsers] = useState([]);
-  const [blackUsers, setBlackUsers] = useState([]);
-  const [modelExists, setModelExists] = useState(false);
-  const [modelInfo, setModelInfo] = useState(null);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [captureStats, setCaptureStats] = useState({ packets: 0, elapsed: 0 });
-  const [training, setTraining] = useState(false);
-  const [lastAnalysisId, setLastAnalysisId] = useState(null);
-  const [recentAnalyses, setRecentAnalyses] = useState([]);
+const STATS = [
+  { value: "49", label: "Behavioral Features" },
+  { value: "99%", label: "Detection Rate" },
+  { value: "0ms", label: "Payload Inspection" },
+  { value: "100%", label: "Encrypted Traffic Coverage" },
+];
 
-  const refreshData = useCallback(async () => {
-    try {
-      const [summaryRes, identitiesRes] = await Promise.all([
-        fetch(`${API}/api/summary`),
-        fetch(`${API}/api/identities`),
-      ]);
-      const summaryData = await summaryRes.json();
-      const identitiesData = await identitiesRes.json();
+const FEATURE_CARDS = [
+  {
+    title: "Behavioral Classification",
+    text: "Classifies traffic using flow behavior instead of packet payloads, so visibility remains strong even when sessions are encrypted.",
+  },
+  {
+    title: "Identity-Centric Tracking",
+    text: "Groups network activity around persistent identities and highlights changes in trust posture across repeat interactions.",
+  },
+  {
+    title: "Live Capture Workflow",
+    text: "Moves from capture to analysis to analyst action in one dashboard, reducing the gap between detection and response.",
+  },
+];
 
-      setHealth(summaryData.health || { health_score: 100 });
-      setModelExists(summaryData.model_exists || false);
-      setModelInfo(summaryData.model);
-      setWhiteUsers(identitiesData.white_users || []);
-      setBlackUsers(identitiesData.black_users || []);
-      setRecentAnalyses(summaryData.recent_analyses || []);
-    } catch (e) {
-      console.log("Backend not available yet");
-    }
-  }, []);
+const DIFFERENTIATORS = [
+  {
+    title: "No payload dependency",
+    text: "Obsidian Lens is designed for modern encrypted traffic and does not depend on deep packet inspection to stay useful.",
+  },
+  {
+    title: "Pivot-aware forensics",
+    text: "The system keeps context as infrastructure changes, helping analysts follow suspicious identities through IP movement.",
+  },
+  {
+    title: "Actionable response layer",
+    text: "The dashboard is not just descriptive. It supports triage, review, and immediate containment from the same workspace.",
+  },
+];
 
-  useEffect(() => {
-    refreshData();
-    const interval = setInterval(refreshData, 5000);
-    return () => clearInterval(interval);
-  }, [refreshData]);
-
-  // ─── Live Capture ─────────────────────────────────────────
-
-  const startCapture = async () => {
-    try {
-      setIsCapturing(true);
-      toast.success("Live capture started.");
-      await fetch(`${API}/api/capture/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ duration: 15, packet_count: 500 }),
-      });
-      pollCapture();
-    } catch (e) {
-      console.error(e);
-      setIsCapturing(false);
-      toast.error("Failed to start live capture.");
-    }
-  };
-
-  const pollCapture = () => {
-    if (window.captureInterval) clearInterval(window.captureInterval);
-    window.captureInterval = setInterval(async () => {
-      try {
-        const res = await fetch(`${API}/api/capture/status`);
-        const data = await res.json();
-        setCaptureStats({ packets: data.packets_captured || 0, elapsed: Math.round(data.elapsed_seconds || 0) });
-        if (!data.is_capturing) {
-          clearInterval(window.captureInterval);
-          window.captureInterval = null;
-          await stopAndAnalyze();
-        }
-      } catch {
-        clearInterval(window.captureInterval);
-        window.captureInterval = null;
-        setIsCapturing(false);
-      }
-    }, 1000);
-  };
-
-  const stopAndAnalyze = async () => {
-    if (window.captureInterval) {
-      clearInterval(window.captureInterval);
-      window.captureInterval = null;
-    }
-    
-    try {
-      const res = await fetch(`${API}/api/capture/stop`, { method: "POST" });
-      const data = await res.json();
-      setIsCapturing(false);
-      
-      if (data.analysis_id) {
-        toast.success(`Live capture completed: ${data.packets_captured || 0} packets analyzed.`);
-        setLastAnalysisId(data.analysis_id);
-        await fetch(`${API}/api/analyze/${data.analysis_id}`);
-        refreshData();
-      }
-    } catch {
-      setIsCapturing(false);
-      toast.error("Failed to stop and analyze the live capture.");
-    }
-  };
-
-  // ─── Modals & Kebab Menu handled by RecordsTable ───
-
+function StarRating({ count = 5 }) {
   return (
-    <div className={styles.dashboard}>
-      <Toaster position="bottom-right" toastOptions={{
-        style: { background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)' }
-      }}/>
-      {/* ─── Top Bar ──────────────────────────────────────── */}
-      <div className={styles.topBar}>
-        <div>
-          <div className={styles.brand}>THE OBSIDIAN LENS</div>
-          <div className={styles.brandSub}>Network Forensic Tool • 49-Param Behavioral Analysis</div>
-        </div>
-        <div className={styles.actions}>
-          <button className="btn btn-accent" style={{background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)'}} onClick={refreshData}>
-            Sync Dashboard
-          </button>
-        </div>
-      </div>
+    <span className={styles.starRow}>
+      {Array.from({ length: count }).map((_, index) => (
+        <svg
+          key={index}
+          width="18"
+          height="18"
+          viewBox="0 0 20 20"
+          fill="#F5A623"
+        >
+          <path d="M10 1l2.4 6.9H20l-5.9 4.2 2.3 6.9L10 14.8l-6.4 4.2 2.3-6.9L0 7.9h7.6z" />
+        </svg>
+      ))}
+    </span>
+  );
+}
 
-      {/* ─── Model Status Bar ─────────────────────────────── */}
-      <div className={styles.modelBar}>
-        <div className={styles.modelStatus}>
-          <div className={`${styles.modelDot} ${modelExists ? styles.modelDotActive : styles.modelDotInactive}`} />
-          <span style={{ color: modelExists ? "var(--white-badge)" : "var(--text-muted)" }}>
-            {modelExists ? "Weighted Random Forest Classifier Active (Learning enabled)" : "Network Service Starting..."}
-          </span>
-        </div>
-        {modelInfo && (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-muted)" }}>
-            {modelInfo.class_labels?.length || "?"} profiles • {modelInfo.n_samples || "?"} dataset size • {((modelInfo.cv_accuracy || 0) * 100).toFixed(1)}% accuracy
-          </span>
-        )}
-      </div>
+function Orbs() {
+  return (
+    <>
+      <motion.div
+        className={`${styles.floatingOrb} ${styles.orbOne}`}
+        animate={{ y: [0, -20, 0] }}
+        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className={`${styles.floatingOrb} ${styles.orbTwo}`}
+        animate={{ y: [0, 16, 0] }}
+        transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+      />
+    </>
+  );
+}
 
-      {/* ─── Health + Ingestion ────────────────────────────── */}
-      <div className={styles.topRow}>
-        <div className={`card ${styles.healthCard}`}>
-          <HealthScore
-            score={health.health_score}
-            whiteCount={health.white_count}
-            blackCount={health.black_count}
-            blockedCount={health.blocked_count}
-            activeThreats={health.active_threats}
-            totalIdentities={health.total_identities}
-          />
-        </div>
-
-        <div className={`card ${styles.ingestionCard}`}>
-          <h3>Ingestion</h3>
-          <div className={styles.captureRow}>
-            {isCapturing ? (
-              <button className="btn btn-danger" onClick={stopAndAnalyze}>
-                Stop Capture
-              </button>
-            ) : (
-              <button className="btn btn-accent" onClick={startCapture}>
-                Live Capture
-              </button>
-            )}
-            {isCapturing && (
-              <span className={styles.captureInfo}>
-                {captureStats.packets} pkts • {captureStats.elapsed}s
-              </span>
-            )}
+export default function HomePage() {
+  return (
+    <main className={styles.page}>
+      <nav className={styles.nav}>
+        <div className={styles.brandGroup}>
+          <div className={styles.brandMark}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="4" fill="#c084fc" />
+              <path
+                d="M12 3v3M12 18v3M3 12h3M18 12h3"
+                stroke="#c084fc"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+            </svg>
           </div>
-          <UploadZone onUploaded={(data) => { setLastAnalysisId(data?.analysis_id); refreshData(); }} />
+          <span className={styles.brandText}>OBSIDIAN LENS</span>
         </div>
-      </div>
 
-      {/* ─── Recent Analyses (External RecordsTable) ───────── */}
-      <div style={{ marginBottom: "1.25rem" }}>
-        <RecordsTable records={recentAnalyses} onRefresh={refreshData} />
-      </div>
+        <div className={styles.navStatus}>Network forensic intelligence platform</div>
+      </nav>
 
-      {/* ─── Identity Tables ──────────────────────────────── */}
-      <div className={styles.tablesSection}>
-        <IdentityTable identities={blackUsers} type="black" onAction={refreshData} />
-        <IdentityTable identities={whiteUsers} type="white" onAction={refreshData} />
-      </div>
-    </div>
+      <section className={styles.hero}>
+        <Orbs />
+
+        <div className={styles.heroGrid}>
+          <motion.div
+            initial={{ opacity: 0, x: -40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.7 }}
+            className={styles.cardColumn}
+          >
+            <div className={styles.productCard}>
+              <div className={styles.cardBlobTop} />
+              <div className={styles.cardBlobBottom} />
+
+              <div className={styles.productInner}>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 22, repeat: Infinity, ease: "linear" }}
+                >
+                  <svg width="130" height="130" viewBox="0 0 130 130">
+                    <circle cx="65" cy="65" r="56" fill="none" stroke="#9333ea" strokeWidth="1.5" strokeDasharray="6 5" />
+                    <circle cx="65" cy="65" r="40" fill="#1a0533" />
+                    <circle cx="65" cy="65" r="26" fill="#2e1065" />
+                    <circle cx="65" cy="65" r="14" fill="#c084fc" />
+                    <circle cx="65" cy="65" r="6" fill="white" />
+                    <line x1="65" y1="9" x2="65" y2="28" stroke="#c084fc" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="65" y1="102" x2="65" y2="121" stroke="#c084fc" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="9" y1="65" x2="28" y2="65" stroke="#c084fc" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="102" y1="65" x2="121" y2="65" stroke="#c084fc" strokeWidth="2.5" strokeLinecap="round" />
+                  </svg>
+                </motion.div>
+                <div className={styles.productName}>
+                  OBSIDIAN
+                  <br />
+                  LENS
+                </div>
+                <div className={styles.versionPill}>v2.4.1 - STABLE RELEASE</div>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.7, delay: 0.15 }}
+            className={styles.copyColumn}
+          >
+            <h1 className={styles.title}>THE OBSIDIAN LENS</h1>
+
+            <div className={styles.ratingRow}>
+              <span>Behavioral - ML-Powered - Real-Time Forensics</span>
+              <StarRating count={5} />
+            </div>
+
+            <p className={styles.description}>
+              Some tools scan packets. Ours reads behavior. The Obsidian Lens analyzes{" "}
+              <strong>49 network features</strong> to classify threats without ever
+              touching encrypted payloads, tracks attackers across IP pivots, and
+              helps neutralize them the moment they are flagged.
+            </p>
+
+            <div className={styles.featurePills}>
+              {FEATURE_PILLS.map((feature, index) => (
+                <motion.span
+                  key={feature.label}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.55 + index * 0.1 }}
+                  className={styles.featurePill}
+                >
+                  <span className={styles.featureIcon}>{feature.icon}</span>
+                  {feature.label}
+                </motion.span>
+              ))}
+            </div>
+
+            <div className={styles.freeTag}>FREE AND OPEN SOURCE</div>
+
+            <div className={styles.ctaRow}>
+              <motion.div
+                whileHover={{ scale: 1.05, boxShadow: "0 6px 28px rgba(124,58,237,0.45)" }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <Link href="/dashboard" className={styles.primaryButton}>
+                  Launch Dashboard
+                </Link>
+              </motion.div>
+            </div>
+          </motion.div>
+        </div>
+
+        <div className={styles.edgeOrbs} aria-hidden="true">
+          {[
+            { size: 88, color: "#a855f7", shift: "55%" },
+            { size: 56, color: "#7c3aed", shift: "20%" },
+            { size: 110, color: "#581c87", shift: "65%" },
+            { size: 72, color: "#9333ea", shift: "30%" },
+            { size: 50, color: "#c084fc", shift: "10%" },
+            { size: 96, color: "#6b21a8", shift: "60%" },
+            { size: 64, color: "#4c1d95", shift: "40%" },
+          ].map((bubble, index) => (
+            <motion.div
+              key={index}
+              className={styles.edgeOrb}
+              style={{
+                width: bubble.size,
+                height: bubble.size,
+                background: bubble.color,
+                transform: `translateX(${bubble.shift})`,
+              }}
+              animate={{ y: [0, index % 2 === 0 ? -10 : 10, 0] }}
+              transition={{ duration: 4 + index * 0.6, repeat: Infinity, ease: "easeInOut" }}
+            />
+          ))}
+        </div>
+      </section>
+
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.9, duration: 0.6 }}
+        className={styles.statsBar}
+      >
+        {STATS.map((stat) => (
+          <div key={stat.label} className={styles.statItem}>
+            <span className={styles.statValue}>{stat.value}</span>
+            <span className={styles.statLabel}>{stat.label}</span>
+          </div>
+        ))}
+      </motion.section>
+
+      <section className={styles.contentSection}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionEyebrow}>Features</span>
+          <h2 className={styles.sectionTitle}>Built for analysts who need clarity fast</h2>
+          <p className={styles.sectionText}>
+            The intro page now carries the full product story, from what the system
+            does to why it stands apart in encrypted-network investigations.
+          </p>
+        </div>
+
+        <div className={styles.cardGrid}>
+          {FEATURE_CARDS.map((item) => (
+            <article key={item.title} className={styles.infoCard}>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className={styles.contentSection}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionEyebrow}>Differentiation</span>
+          <h2 className={styles.sectionTitle}>Why Obsidian Lens feels different</h2>
+          <p className={styles.sectionText}>
+            It is designed around behavioral evidence, identity continuity, and a
+            tight bridge from analysis to response.
+          </p>
+        </div>
+
+        <div className={styles.differentiatorList}>
+          {DIFFERENTIATORS.map((item, index) => (
+            <article key={item.title} className={styles.differentiatorCard}>
+              <span className={styles.diffIndex}>0{index + 1}</span>
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
   );
 }

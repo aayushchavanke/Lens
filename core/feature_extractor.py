@@ -1,12 +1,15 @@
 """
 BENFET Core - Feature Extractor (v2)
 Computes comprehensive behavioral feature vectors from parsed flow data.
-78 behavioral features across 5 categories:
-  1. Temporal (21 — timing, IAT, active/idle)
-  2. Spatial (packet sizes, directional lengths, SPL)
-  3. Volumetric & Directional (rates, ratios, bursts)
-  4. TCP/IP & Flags (window sizes, headers, all flag counts)
-  5. Encrypted/TLS (JA3, ciphersuites, extensions, handshake duration)
+Extracts 90+ raw signals, condensed to 49 ML features used for classification:
+  1. Temporal (21 — timing, IAT statistics, active/idle periods)
+  2. Spatial (12 — forward/backward packet length statistics)
+  3. Volumetric & Directional (8 — rates, ratios, burst detection)
+  4. TCP/IP & Flags (8 — window sizes, header lengths, all 6 flag counts)
+
+Additional signals (extracted but NOT used by classifier — display/XAI only):
+  - TLS fingerprinting (JA3, ciphersuites, extensions, handshake duration)
+  - Sequence of Packet Lengths (SPL), TTL, DNS packet counts, Burst metrics
 
 IMPORTANT: IP addresses are NEVER used as features.
 The classifier works purely on behavioral metadata, enabling behavior-based

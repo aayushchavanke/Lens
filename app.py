@@ -273,8 +273,8 @@ def run_analysis(analysis_id):
         if parsed['metadata']['total_packets'] == 0:
             raise ValueError('No packets found in PCAP file.')
 
-        # Step 2: Extract 78 features
-        print(f"[ANALYZE] Extracting 78-parameter features...")
+        # Step 2: Extract 49 behavioral features
+        print(f"[ANALYZE] Extracting 49-parameter behavioral features...")
         features_df = extract_features(parsed)
 
         if features_df.empty:
@@ -341,6 +341,7 @@ def run_analysis(analysis_id):
                 )
 
                 pred['identity_id'] = identity_id
+                pred['src_ip'] = src_ip
                 pred['dst_ip'] = dst_ip
                 identities_created.append(identity_id)
 

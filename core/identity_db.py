@@ -12,6 +12,7 @@ import sqlite3
 import os
 import json
 import math
+import subprocess
 from datetime import datetime
 from config import BASE_DIR
 
@@ -263,11 +264,49 @@ def upsert_identity(src_ip, dst_ip, category, threat_type, confidence,
 def block_identity(user_id):
     conn = _get_conn()
     now = datetime.now().isoformat()
+    
+    # Extract identity's IPs to block
+    ips_to_block = set()
+    macs = conn.execute("SELECT id FROM mac_addresses WHERE user_id = ?", (user_id,)).fetchall()
+    for m in macs:
+        ips = conn.execute("SELECT ip_address FROM ip_addresses WHERE mac_id = ?", (m['id'],)).fetchall()
+        for ip in ips:
+            if ip['ip_address'] and ip['ip_address'] not in ['127.0.0.1', 'localhost', '0.0.0.0', '::1']:
+                ips_to_block.add(ip['ip_address'])
+
+    # Apply Windows Firewall rules
+    details = 'Identity blocked by administrator.'
+    if ips_to_block:
+        blocked_ips = []
+        for ip in ips_to_block:
+            rule_name = f"BENFET_BLOCK_User_{user_id}_{ip}"
+            try:
+                # Add Inbound Rule
+                subprocess.run(
+                    ["netsh", "advfirewall", "firewall", "add", "rule", 
+                     f"name={rule_name}_IN", "dir=in", "action=block", f"remoteip={ip}"],
+                    capture_output=True, text=True, check=True
+                )
+                # Add Outbound Rule
+                subprocess.run(
+                    ["netsh", "advfirewall", "firewall", "add", "rule", 
+                     f"name={rule_name}_OUT", "dir=out", "action=block", f"remoteip={ip}"],
+                    capture_output=True, text=True, check=True
+                )
+                blocked_ips.append(ip)
+            except Exception as e:
+                print(f"[FIREWALL ERROR] Failed to block {ip}. Ensure BENFET is running as Administrator.")
+
+        if blocked_ips:
+            details += f" Network traffic dropped for IPs: {', '.join(blocked_ips)}."
+        else:
+            details += " (Failed: Missing Administrator privileges to apply firewall rules)."
+
     conn.execute("UPDATE users SET is_blocked = 1 WHERE id = ?", (user_id,))
     conn.execute("""
         INSERT INTO identity_events (user_id, event_type, details, timestamp)
-        VALUES (?, 'blocked', 'Identity blocked by administrator', ?)
-    """, (user_id, now))
+        VALUES (?, 'blocked', ?, ?)
+    """, (user_id, details, now))
     conn.commit()
     conn.close()
 
@@ -275,11 +314,43 @@ def block_identity(user_id):
 def unblock_identity(user_id):
     conn = _get_conn()
     now = datetime.now().isoformat()
+    
+    # Extract identity's IPs to unblock
+    ips_to_unblock = set()
+    macs = conn.execute("SELECT id FROM mac_addresses WHERE user_id = ?", (user_id,)).fetchall()
+    for m in macs:
+        ips = conn.execute("SELECT ip_address FROM ip_addresses WHERE mac_id = ?", (m['id'],)).fetchall()
+        for ip in ips:
+            if ip['ip_address'] and ip['ip_address'] not in ['127.0.0.1', 'localhost', '0.0.0.0', '::1']:
+                ips_to_unblock.add(ip['ip_address'])
+
+    # Remove Windows Firewall rules
+    details = 'Identity unblocked by administrator.'
+    if ips_to_unblock:
+        unblocked_ips = []
+        for ip in ips_to_unblock:
+            rule_name = f"BENFET_BLOCK_User_{user_id}_{ip}"
+            try:
+                subprocess.run(
+                    ["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_IN"],
+                    capture_output=True, text=True
+                )
+                subprocess.run(
+                    ["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_name}_OUT"],
+                    capture_output=True, text=True
+                )
+                unblocked_ips.append(ip)
+            except Exception as e:
+                pass
+        
+        if unblocked_ips:
+            details += f" Restored access for IPs: {', '.join(unblocked_ips)}."
+
     conn.execute("UPDATE users SET is_blocked = 0 WHERE id = ?", (user_id,))
     conn.execute("""
         INSERT INTO identity_events (user_id, event_type, details, timestamp)
-        VALUES (?, 'unblocked', 'Identity unblocked by administrator', ?)
-    """, (user_id, now))
+        VALUES (?, 'unblocked', ?, ?)
+    """, (user_id, details, now))
     conn.commit()
     conn.close()
 

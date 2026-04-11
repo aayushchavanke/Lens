@@ -1,33 +1,39 @@
 :root {
-  --bg-black: #000000;
-  --bg-surface: #0a0a0a;
-  --bg-panel: #0a0a0a;
-  --bg-card: #0a0a0a;
-  --bg-hover: #171717;
+  --bg-black: #f5f0ea;
+  --bg-surface: #efe5ff;
+  --bg-panel: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #f1e6ff;
 
-  --accent: #f5f5f5;
-  --accent-glow: rgba(245, 245, 245, 0.1);
-  --accent-dim: rgba(245, 245, 245, 0.05);
+  --accent: #7c3aed;
+  --accent-glow: rgba(124, 58, 237, 0.24);
+  --accent-dim: rgba(192, 132, 252, 0.12);
 
-  --text-primary: #ededed;
-  --text-secondary: #a3a3a3;
-  --text-muted: #525252;
+  --text-primary: #1a0533;
+  --text-secondary: #3a2a50;
+  --text-muted: #7a6a8a;
+  --text: #1a0533;
 
-  --border: #262626;
-  --border-hover: #404040;
+  --border: #dbc8f4;
+  --border-hover: #c084fc;
+  --border-color: #dbc8f4;
 
-  --white-badge: #a3a3a3;
-  --white-badge-bg: #1f1f1f;
-  --black-badge: #f87171;
-  --black-badge-bg: rgba(248, 113, 113, 0.15);
-  --blocked-badge: #fbbf24;
-  --blocked-badge-bg: rgba(251, 191, 36, 0.15);
+  --card-bg: #ffffff;
+  --bg-primary: #ffffff;
 
-  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --white-badge: #7c3aed;
+  --white-badge-bg: rgba(192, 132, 252, 0.2);
+  --black-badge: #d64d68;
+  --black-badge-bg: rgba(255, 176, 176, 0.32);
+  --blocked-badge: #f59e0b;
+  --blocked-badge-bg: rgba(245, 158, 11, 0.18);
 
-  --radius: 8px;
-  --radius-sm: 4px;
+  --font-ui: "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-display: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+  --font-mono: Consolas, "Courier New", monospace;
+
+  --radius: 14px;
+  --radius-sm: 999px;
   --transition: 0.2s ease;
 }
 
@@ -37,7 +43,8 @@
   padding: 0;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   background: var(--bg-black);
   color: var(--text-primary);
@@ -47,9 +54,13 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ─── Typography ─────────────────────────────────────────── */
+body {
+  min-height: 100vh;
+}
 
-h1, h2, h3 {
+h1,
+h2,
+h3 {
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -57,8 +68,6 @@ h1, h2, h3 {
 .mono {
   font-family: var(--font-mono);
 }
-
-/* ─── Scrollbar ──────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
   width: 6px;
@@ -78,23 +87,23 @@ h1, h2, h3 {
   background: var(--text-muted);
 }
 
-/* ─── Buttons ────────────────────────────────────────────── */
-
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  padding: 0.7rem 1.15rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: #fffdfd;
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 700;
   cursor: pointer;
   transition: all var(--transition);
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .btn:hover {
@@ -105,17 +114,19 @@ h1, h2, h3 {
 .btn-accent {
   background: var(--accent);
   border-color: var(--accent);
+  color: #ffffff;
   box-shadow: 0 0 12px var(--accent-glow);
 }
 
 .btn-accent:hover {
-  filter: brightness(1.15);
+  filter: brightness(1.08);
   box-shadow: 0 0 20px var(--accent-glow);
 }
 
 .btn-danger {
   border-color: var(--black-badge);
   color: var(--black-badge);
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .btn-danger:hover {
@@ -125,6 +136,7 @@ h1, h2, h3 {
 .btn-success {
   border-color: var(--white-badge);
   color: var(--white-badge);
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .btn-success:hover {
@@ -132,19 +144,17 @@ h1, h2, h3 {
 }
 
 .btn-sm {
-  padding: 0.25rem 0.625rem;
+  padding: 0.45rem 0.8rem;
   font-size: 0.75rem;
 }
-
-/* ─── Badges ─────────────────────────────────────────────── */
 
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.125rem 0.5rem;
+  padding: 0.2rem 0.6rem;
   border-radius: 9999px;
   font-size: 0.6875rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
@@ -164,21 +174,18 @@ h1, h2, h3 {
   color: var(--blocked-badge);
 }
 
-/* ─── Cards ──────────────────────────────────────────────── */
-
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem;
+  box-shadow: 0 20px 40px rgba(124, 58, 237, 0.08);
   transition: border-color var(--transition);
 }
 
 .card:hover {
   border-color: var(--border-hover);
 }
-
-/* ─── Tables ─────────────────────────────────────────────── */
 
 .data-table {
   width: 100%;
@@ -190,7 +197,7 @@ h1, h2, h3 {
   text-align: left;
   padding: 0.625rem 0.75rem;
   font-size: 0.6875rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -214,35 +221,45 @@ h1, h2, h3 {
   color: var(--accent);
 }
 
-/* ─── Upload Zone ────────────────────────────────────────── */
-
 .upload-zone {
   border: 2px dashed var(--border);
-  border-radius: var(--radius);
+  border-radius: 1.25rem;
   padding: 2rem;
   text-align: center;
   cursor: pointer;
   transition: all var(--transition);
   color: var(--text-muted);
+  background: linear-gradient(180deg, #ffffff, #f9f3ff);
 }
 
 .upload-zone:hover,
 .upload-zone.dragover {
   border-color: var(--accent);
-  background: var(--accent-dim);
+  background: #f4e8ff;
   color: var(--text-primary);
 }
 
-/* ─── Animations ─────────────────────────────────────────── */
-
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .animate-in {

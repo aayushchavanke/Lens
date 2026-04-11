@@ -1,0 +1,448 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at top left, rgba(192, 132, 252, 0.16), transparent 24rem),
+    linear-gradient(180deg, #f5f0ea 0%, #efe7dc 100%);
+  color: #1a0533;
+  font-family: var(--font-ui);
+  overflow-x: hidden;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  position: relative;
+  z-index: 2;
+}
+
+.brandGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.brandMark {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a0533;
+}
+
+.brandText,
+.productName,
+.title,
+.freeTag,
+.statValue,
+.sectionTitle,
+.diffIndex {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+}
+
+.brandText {
+  font-size: 1.4rem;
+}
+
+.navStatus {
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(124, 58, 237, 0.14);
+  color: #5a4a6a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.hero {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.heroGrid {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  align-items: center;
+  padding: 2rem 2rem 3rem;
+}
+
+.cardColumn {
+  display: flex;
+  justify-content: center;
+}
+
+.copyColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 40rem;
+}
+
+.floatingOrb {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.orbOne {
+  width: 20rem;
+  height: 20rem;
+  top: -5rem;
+  left: -5rem;
+  background: rgba(180, 130, 255, 0.2);
+  filter: blur(60px);
+}
+
+.orbTwo {
+  width: 12.5rem;
+  height: 12.5rem;
+  bottom: 2.5rem;
+  left: 40%;
+  background: rgba(124, 58, 237, 0.12);
+  filter: blur(50px);
+}
+
+.productCard {
+  position: relative;
+  width: 21.25rem;
+  height: 25rem;
+  border-radius: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #ead9ff 0%, #dcc2fb 100%);
+  box-shadow: 8px 12px 48px rgba(120, 60, 200, 0.22);
+}
+
+.cardBlobTop,
+.cardBlobBottom {
+  position: absolute;
+  border-radius: 999px;
+}
+
+.cardBlobTop {
+  top: 1.25rem;
+  right: 1.25rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  background: #a855f7;
+  opacity: 0.25;
+}
+
+.cardBlobBottom {
+  bottom: 1.75rem;
+  left: 1.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: #6d28d9;
+  opacity: 0.2;
+}
+
+.productInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.productName {
+  font-size: 3rem;
+  line-height: 0.95;
+  text-align: center;
+}
+
+.versionPill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  background: #1a0533;
+  color: #c084fc;
+}
+
+.title {
+  line-height: 0.92;
+  color: #1a0533;
+  font-size: clamp(3.2rem, 7vw, 5.5rem);
+}
+
+.ratingRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.starRow {
+  display: inline-flex;
+  gap: 0.15rem;
+}
+
+.description,
+.sectionText,
+.infoCard p,
+.differentiatorCard p {
+  color: #5a4a6a;
+  font-size: 0.98rem;
+  line-height: 1.8;
+}
+
+.description strong {
+  color: #1a0533;
+}
+
+.featurePills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.featurePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  background: #e6d5ff;
+  color: #5b21b6;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.featureIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.freeTag {
+  font-size: 3.1rem;
+  color: #7c3aed;
+}
+
+.ctaRow {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.95rem 1.6rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  border: 0;
+  cursor: pointer;
+  background: #7c3aed;
+  color: white;
+}
+
+.edgeOrbs {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 13rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  align-items: flex-end;
+  padding-right: 0.5rem;
+  pointer-events: none;
+}
+
+.edgeOrb {
+  border-radius: 999px;
+  opacity: 0.88;
+}
+
+.statsBar {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2rem;
+  padding: 1rem 2rem;
+  border-top: 1px solid #e0d4f5;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.08);
+  background: rgba(237, 227, 255, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.statValue {
+  font-size: 2rem;
+  color: #7c3aed;
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  color: #7a6a8a;
+}
+
+.contentSection {
+  padding: 4rem 2rem 0;
+}
+
+.sectionHeader {
+  max-width: 46rem;
+  margin-bottom: 2rem;
+}
+
+.sectionEyebrow {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.1);
+  color: #6d28d9;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.sectionTitle {
+  margin: 0.9rem 0 0.75rem;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 1;
+  color: #1a0533;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.infoCard,
+.differentiatorCard {
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(124, 58, 237, 0.14);
+  border-radius: 1.5rem;
+  padding: 1.4rem;
+  box-shadow: 0 20px 50px rgba(84, 43, 140, 0.08);
+}
+
+.infoCard h3,
+.differentiatorCard h3 {
+  margin: 0 0 0.65rem;
+  color: #1a0533;
+  font-size: 1.1rem;
+}
+
+.differentiatorList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  padding-bottom: 4rem;
+}
+
+.differentiatorCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 1rem;
+}
+
+.diffIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 1rem;
+  background: #1a0533;
+  color: #c084fc;
+  font-size: 1rem;
+}
+
+@media (max-width: 960px) {
+  .nav {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .heroGrid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+
+  .copyColumn,
+  .sectionHeader {
+    max-width: none;
+  }
+
+  .edgeOrbs {
+    display: none;
+  }
+
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .nav,
+  .heroGrid,
+  .statsBar,
+  .contentSection {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .productCard {
+    width: min(100%, 21rem);
+    height: 23rem;
+  }
+
+  .freeTag {
+    font-size: 2.35rem;
+  }
+
+  .ctaRow {
+    flex-direction: column;
+  }
+
+  .primaryButton,
+  .navStatus {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .differentiatorCard {
+    grid-template-columns: 1fr;
+  }
+}

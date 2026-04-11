@@ -3,12 +3,12 @@ Obsidian Lens — Professional PDF Forensic Report Generator
 Generates per-capture reports with:
   - Cover page with capture metadata
   - Behavioral analysis summary
-  - Most influential parameters (feature importance)
-  - XAI conclusions
+  - Most influential parameters (feature importance bar chart)
+  - XAI conclusions with plain-English explanations
   - Analysis suggestions
-  - Flow classifications
+  - Flow classifications (Src → Dst with full IP info)
   - Protocol distribution & DNS analysis
-  - 78-dimension behavioral fingerprint reference
+  - 49-feature behavioral fingerprint reference
 """
 
 import os
@@ -27,22 +27,24 @@ from reportlab.graphics import renderPDF
 from config import REPORTS_FOLDER
 
 
-# ─── Color Palette ────────────────────────────────────────────────────────────
+# ─── Color Palette (Grape Mix Theme) ─────────────────────────────────────────
 
-DARK_BG       = colors.HexColor('#0a0e17')
-CARD_BG       = colors.HexColor('#1a1f2e')
-ACCENT_BLUE   = colors.HexColor('#60a5fa')
-ACCENT_PURPLE = colors.HexColor('#a78bfa')
-ACCENT_GREEN  = colors.HexColor('#34d399')
-ACCENT_ORANGE = colors.HexColor('#fb923c')
-ACCENT_RED    = colors.HexColor('#f87171')
-ACCENT_AMBER  = colors.HexColor('#fbbf24')
-TEXT_PRIMARY  = colors.HexColor('#111827')
-TEXT_MUTED    = colors.HexColor('#6b7280')
-TEXT_WHITE    = colors.HexColor('#f9fafb')
-BORDER_COLOR  = colors.HexColor('#e5e7eb')
-ROW_ALT       = colors.HexColor('#f8fafc')
-HEADER_BG     = colors.HexColor('#1e293b')
+PAGE_BG       = colors.HexColor('#f5f0ff')   # Cream lavender page background
+CARD_BG       = colors.HexColor('#8A00C4')   # Deep grape purple — card/header fills
+CARD_LIGHT    = colors.HexColor('#f0daff')   # Soft lavender — alternating rows
+ACCENT_PURPLE = colors.HexColor('#8A00C4')   # Primary accent
+ACCENT_GRAPE  = colors.HexColor('#bf8edc')   # Secondary accent / chart fills
+ACCENT_GREEN  = colors.HexColor('#22c55e')   # CLEAR threat status
+ACCENT_AMBER  = colors.HexColor('#f59e0b')   # ELEVATED threat status
+ACCENT_RED    = colors.HexColor('#ffb0b0')   # CRITICAL — soft coral red
+ACCENT_RED_TEXT = colors.HexColor('#cc0000') # Red text on light bg
+TEXT_PRIMARY  = colors.HexColor('#000000')   # Pure black headings
+TEXT_BODY     = colors.HexColor('#1a1a1a')   # Near-black body text
+TEXT_MUTED    = colors.HexColor('#6b21a8')   # Muted purple for secondary labels
+TEXT_WHITE    = colors.HexColor('#ffffff')   # White text on dark bg
+BORDER_COLOR  = colors.HexColor('#e2d4f5')   # Soft lavender border
+ROW_ALT       = colors.HexColor('#f7f0ff')   # Very light lavender alt rows
+HEADER_BG     = colors.HexColor('#8A00C4')   # Table header — grape
 
 
 # ─── Page callback for header/footer ─────────────────────────────────────────
@@ -80,13 +82,23 @@ class _HeaderFooterCanvas:
         w, h = A4
         page_num = self._canvas._pageNumber
 
-        # Top accent bar
-        c.setFillColor(ACCENT_BLUE)
-        c.rect(0, h - 6, w, 6, fill=1, stroke=0)
+        # Cream page background fill
+        c.setFillColor(PAGE_BG)
+        c.rect(0, 0, w, h, fill=1, stroke=0)
+
+        # Top grape accent bar (thick)
+        c.setFillColor(ACCENT_PURPLE)
+        c.rect(0, h - 10, w, 10, fill=1, stroke=0)
+
+        # Top bar label
+        c.setFillColor(TEXT_WHITE)
+        c.setFont("Helvetica-Bold", 7)
+        c.drawString(20 * mm, h - 7, "THE OBSIDIAN LENS  —  FORENSIC INTELLIGENCE PLATFORM")
+        c.drawRightString(w - 20 * mm, h - 7, f"CONFIDENTIAL  ·  {self.analysis_id}")
 
         # Footer line
         c.setStrokeColor(BORDER_COLOR)
-        c.setLineWidth(0.5)
+        c.setLineWidth(0.8)
         c.line(20 * mm, 14 * mm, w - 20 * mm, 14 * mm)
 
         # Footer text
@@ -105,10 +117,10 @@ def _feature_bar_chart(top_features, width=440, bar_height=14, padding=6):
         return None
 
     max_val = max(v for _, v in top_features) if top_features else 1
-    bar_colors = [ACCENT_BLUE, ACCENT_PURPLE, ACCENT_PURPLE, ACCENT_BLUE,
-                  ACCENT_BLUE, TEXT_MUTED, TEXT_MUTED, TEXT_MUTED, TEXT_MUTED, TEXT_MUTED]
+    bar_colors = [ACCENT_PURPLE, ACCENT_GRAPE, ACCENT_GRAPE, ACCENT_PURPLE,
+                  ACCENT_PURPLE, TEXT_MUTED, TEXT_MUTED, TEXT_MUTED, TEXT_MUTED, TEXT_MUTED]
 
-    label_width = 150
+    label_width = 190
     bar_area = width - label_width - 60  # 60 for value label
     row_h = bar_height + padding
     total_h = len(top_features) * row_h + 10
@@ -120,12 +132,13 @@ def _feature_bar_chart(top_features, width=440, bar_height=14, padding=6):
         bar_w = (val / max_val) * bar_area if max_val > 0 else 0
         color = bar_colors[i] if i < len(bar_colors) else TEXT_MUTED
 
-        # Feature name
-        d.add(String(0, y + 2, name[:28], fontName='Courier', fontSize=7, fillColor=TEXT_PRIMARY))
+        # Feature name — use full readable name, allow up to 40 chars
+        readable_name = _format_feature_name(name)
+        d.add(String(0, y + 2, readable_name[:40], fontName='Helvetica', fontSize=7, fillColor=TEXT_PRIMARY))
 
         # Background track
         track = Rect(label_width, y, bar_area, bar_height - 2,
-                     fillColor=colors.HexColor('#f1f5f9'), strokeColor=None)
+                     fillColor=colors.HexColor('#ede9fe'), strokeColor=None)
         d.add(track)
 
         # Filled bar
@@ -135,11 +148,65 @@ def _feature_bar_chart(top_features, width=440, bar_height=14, padding=6):
             d.add(bar)
 
         # Value label
-        pct_str = f"{val * 100:.1f}%"
+        pct_str = f"{val * 100:.2f}%"
         d.add(String(label_width + bar_area + 4, y + 2, pct_str,
                      fontName='Helvetica', fontSize=7, fillColor=TEXT_MUTED))
 
     return d
+
+def _format_feature_name(feat):
+    mapping = {
+        'flow_duration': 'Flow Duration',
+        'iat_mean': 'Inter-Arrival Time Mean',
+        'iat_std': 'Inter-Arrival Time Std Dev',
+        'iat_min': 'Inter-Arrival Time Min',
+        'iat_max': 'Inter-Arrival Time Max',
+        'fwd_iat_mean': 'Forward IAT Mean',
+        'fwd_iat_std': 'Forward IAT Std Dev',
+        'fwd_iat_min': 'Forward IAT Min',
+        'fwd_iat_max': 'Forward IAT Max',
+        'bwd_iat_mean': 'Backward IAT Mean',
+        'bwd_iat_std': 'Backward IAT Std Dev',
+        'bwd_iat_min': 'Backward IAT Min',
+        'bwd_iat_max': 'Backward IAT Max',
+        'active_time_mean': 'Active State Mean Time',
+        'active_time_std': 'Active State Std Dev',
+        'active_time_min': 'Active State Min Time',
+        'active_time_max': 'Active State Max Time',
+        'idle_time_mean': 'Idle State Mean Time',
+        'idle_time_std': 'Idle State Std Dev',
+        'idle_time_min': 'Idle State Min Time',
+        'idle_time_max': 'Idle State Max Time',
+        'total_fwd_packets': 'Total Forward Packets',
+        'total_bwd_packets': 'Total Backward Packets',
+        'total_fwd_bytes': 'Total Forward Bytes',
+        'total_bwd_bytes': 'Total Backward Bytes',
+        'fwd_pkt_len_mean': 'Forward Packet Length Mean',
+        'fwd_pkt_len_std': 'Forward Packet Length Std',
+        'fwd_pkt_len_min': 'Forward Packet Length Min',
+        'fwd_pkt_len_max': 'Forward Packet Length Max',
+        'bwd_pkt_len_mean': 'Backward Packet Length Mean',
+        'bwd_pkt_len_std': 'Backward Packet Length Std',
+        'bwd_pkt_len_min': 'Backward Packet Length Min',
+        'bwd_pkt_len_max': 'Backward Packet Length Max',
+        'avg_packet_size': 'Average Packet Size',
+        'pkt_len_variance': 'Packet Length Variance',
+        'flow_bytes_per_sec': 'Flow Bytes/sec',
+        'flow_packets_per_sec': 'Flow Packets/sec',
+        'down_up_ratio': 'Download/Upload Ratio',
+        'fwd_bwd_packet_ratio': 'Forward/Backward Packet Ratio',
+        'init_win_fwd': 'Initial Forward TCP Window',
+        'init_win_bwd': 'Initial Backward TCP Window',
+        'fwd_header_len': 'Forward Header Length',
+        'bwd_header_len': 'Backward Header Length',
+        'fin_flag_count': 'FIN Flag Count',
+        'syn_flag_count': 'SYN Flag Count',
+        'rst_flag_count': 'RST Flag Count',
+        'psh_flag_count': 'PSH Flag Count',
+        'ack_flag_count': 'ACK Flag Count',
+        'urg_flag_count': 'URG Flag Count',
+    }
+    return mapping.get(feat, feat.replace('_', ' ').title())
 
 
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
@@ -192,8 +259,8 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
         styles['BrandSub']
     ))
     elements.append(Spacer(1, 32))
-    elements.append(HRFlowable(width="100%", thickness=2, color=ACCENT_BLUE, spaceAfter=0))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=ACCENT_PURPLE, spaceBefore=3, spaceAfter=20))
+    elements.append(HRFlowable(width="100%", thickness=3, color=ACCENT_PURPLE, spaceAfter=0))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ACCENT_GRAPE, spaceBefore=3, spaceAfter=20))
 
     elements.append(Paragraph("Forensic Analysis Report", styles['CoverTitle']))
     elements.append(Spacer(1, 6))
@@ -227,7 +294,7 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
     meta_rows = [
         ['Analysis ID',      analysis_id,
          'Generated',        gen_time],
-        ['System',           'Obsidian Lens v2 — 78 Behavioral Features',
+        ['System',           'Obsidian Lens v3 — 49 Behavioral Features',
          'Source',           metadata.get('source', 'PCAP Upload').replace('_', ' ').title()],
         ['Total Packets',    f"{metadata.get('total_packets', 'N/A'):,}" if isinstance(metadata.get('total_packets'), int) else str(metadata.get('total_packets', 'N/A')),
          'Total Flows',      str(len(predictions))],
@@ -240,12 +307,17 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
         ('FONTNAME',      (0, 0), (0, -1), 'Helvetica-Bold'),
         ('FONTNAME',      (2, 0), (2, -1), 'Helvetica-Bold'),
         ('FONTSIZE',      (0, 0), (-1, -1), 9),
-        ('TEXTCOLOR',     (0, 0), (0, -1), ACCENT_BLUE),
-        ('TEXTCOLOR',     (2, 0), (2, -1), ACCENT_BLUE),
-        ('TOPPADDING',    (0, 0), (-1, -1), 7),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+        ('TEXTCOLOR',     (0, 0), (0, -1), ACCENT_PURPLE),
+        ('TEXTCOLOR',     (2, 0), (2, -1), ACCENT_PURPLE),
+        ('TEXTCOLOR',     (1, 0), (1, -1), TEXT_BODY),
+        ('TEXTCOLOR',     (3, 0), (3, -1), TEXT_BODY),
+        ('TOPPADDING',    (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ('LINEBELOW',     (0, 0), (-1, -1), 0.5, BORDER_COLOR),
-        ('BACKGROUND',    (0, 0), (-1, 0), colors.HexColor('#f8fafc')),
+        ('BACKGROUND',    (0, 0), (-1, 0), CARD_LIGHT),
+        ('BACKGROUND',    (0, 1), (-1, 1), colors.white),
+        ('BACKGROUND',    (0, 2), (-1, 2), CARD_LIGHT),
+        ('BACKGROUND',    (0, 3), (-1, 3), colors.white),
     ]))
     elements.append(meta_table)
     elements.append(Spacer(1, 20))
@@ -253,7 +325,7 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
     # Key finding callout
     elements.append(_callout(
         "[!] Behavioral Persistence Engine",
-        "BENFET identifies devices by analyzing <b>78 behavioral dimensions</b> — not IP addresses. "
+        "BENFET identifies devices by analyzing <b>49 behavioral dimensions</b> — not IP addresses. "
         "Even when attackers change IPs via VPN or proxy, their behavioral fingerprint remains consistent. "
         "This enables high-confidence identification of cyber criminals across sessions.",
         styles
@@ -270,7 +342,8 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
     if top_features:
         elements.append(Paragraph(
             "The following features had the highest attribution weight in the model's classification decision. "
-            "Scores represent normalised SHAP / Gini importance across the Random Forest ensemble.",
+            "Scores represent normalised Gini importance across the Random Forest ensemble. "
+            "All feature names are shown in plain, human-readable language.",
             styles['Body']
         ))
         elements.append(Spacer(1, 10))
@@ -278,21 +351,7 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
         chart = _feature_bar_chart(top_features[:10])
         if chart:
             elements.append(chart)
-            elements.append(Spacer(1, 16))
-
-        # Table version for precise values
-        feat_rows = [['Rank', 'Feature', 'Importance Weight', 'Contribution']]
-        for i, (name, val) in enumerate(top_features[:10], 1):
-            bar_cells = '█' * int(val / max(v for _, v in top_features) * 20) if top_features else ''
-            feat_rows.append([
-                str(i), name,
-                f"{val * 100:.2f}%",
-                bar_cells or '▌',
-            ])
-        feat_table = Table(feat_rows, colWidths=[30, 160, 90, 140])
-        feat_table.setStyle(_table_style(header_color=HEADER_BG))
-        elements.append(feat_table)
-        elements.append(Spacer(1, 20))
+            elements.append(Spacer(1, 20))
     else:
         elements.append(Paragraph(
             "Feature importance data unavailable — run analysis with a trained model to generate XAI insights.",
@@ -317,19 +376,20 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
             import re
             feature_match = re.match(r'^\[([^\]]+)\]', insight)
             weight_match  = re.search(r'\(([^)]+Weight[^)]*)\)', insight)
-            feature_name  = feature_match.group(1) if feature_match else f"Finding {i}"
+            raw_feature_name = feature_match.group(1) if feature_match else ""
+            feature_name  = _format_feature_name(raw_feature_name) if raw_feature_name else f"Finding {i}"
             weight_label  = weight_match.group(1)  if weight_match  else ""
 
             # Strip the [feature] (weight): prefix to get pure text
             body = re.sub(r'^\[[^\]]+\]\s*\([^)]+\):\s*', '', insight).strip()
 
             insight_data = [
-                [Paragraph(f"<b>{i}. [{feature_name}]</b>  <font color='#6b7280' size='8'>{weight_label}</font>", styles['InsightTitle'])],
+                [Paragraph(f"<b>{i}. [{feature_name}]</b>  <font color='#6b21a8' size='8'>{weight_label}</font>", styles['InsightTitle'])],
                 [Paragraph(body, styles['InsightBody'])],
             ]
             insight_table = Table(insight_data, colWidths=[430])
             insight_table.setStyle(TableStyle([
-                ('BACKGROUND',    (0, 0), (-1, 0), colors.HexColor('#eff6ff')),
+                ('BACKGROUND',    (0, 0), (-1, 0), CARD_LIGHT),
                 ('BACKGROUND',    (0, 1), (-1, 1), colors.white),
                 ('LEFTPADDING',   (0, 0), (-1, -1), 12),
                 ('RIGHTPADDING',  (0, 0), (-1, -1), 12),
@@ -337,8 +397,8 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
                 ('TOPPADDING',    (0, 1), (-1, 1), 6),
                 ('BOTTOMPADDING', (0, 1), (-1, 1), 10),
-                ('BOX',           (0, 0), (-1, -1), 0.5, BORDER_COLOR),
-                ('LINEBELOW',     (0, 0), (-1, 0), 0.5, BORDER_COLOR),
+                ('BOX',           (0, 0), (-1, -1), 1, BORDER_COLOR),
+                ('LINEBELOW',     (0, 0), (-1, 0), 1, ACCENT_GRAPE),
                 ('ROUNDEDCORNERS', [4]),
             ]))
             elements.append(KeepTogether([insight_table, Spacer(1, 8)]))
@@ -447,7 +507,7 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
 
 
     # ─── DNS ANALYSIS ────────────────────────────────────────────────────────
-    if analysis_data and analysis_data.get('dns_analysis'):
+    if analysis_data and analysis_data.get('dns_analysis') and analysis_data['dns_analysis'].get('total_dns_queries', 0) > 0:
         elements.append(Spacer(1, 16))
         elements.append(_section_header("DNS Analysis", styles))
         dns = analysis_data['dns_analysis']
@@ -474,7 +534,7 @@ def generate_pdf_report(analysis_id, analysis_data, predictions=None,
 
 def _section_header(title, styles):
     return KeepTogether([
-        HRFlowable(width="100%", thickness=0.5, color=BORDER_COLOR, spaceBefore=4, spaceAfter=0),
+        HRFlowable(width="100%", thickness=2, color=ACCENT_PURPLE, spaceBefore=6, spaceAfter=0),
         Spacer(1, 6),
         Paragraph(title, styles['SectionHeading']),
         Spacer(1, 8),
@@ -488,16 +548,16 @@ def _callout(title, body, styles):
     ]
     t = Table(data, colWidths=[430])
     t.setStyle(TableStyle([
-        ('BACKGROUND',    (0, 0), (-1, 0), colors.HexColor('#eff6ff')),
-        ('BACKGROUND',    (0, 1), (-1, 1), colors.HexColor('#f8fafc')),
+        ('BACKGROUND',    (0, 0), (-1, 0), CARD_BG),
+        ('BACKGROUND',    (0, 1), (-1, 1), CARD_LIGHT),
         ('LEFTPADDING',   (0, 0), (-1, -1), 14),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 14),
         ('TOPPADDING',    (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
         ('TOPPADDING',    (0, 1), (-1, 1), 8),
         ('BOTTOMPADDING', (0, 1), (-1, 1), 12),
-        ('BOX',           (0, 0), (-1, -1), 1.5, ACCENT_BLUE),
-        ('LINEBELOW',     (0, 0), (-1, 0), 0.5, BORDER_COLOR),
+        ('BOX',           (0, 0), (-1, -1), 2, ACCENT_PURPLE),
+        ('LINEBELOW',     (0, 0), (-1, 0), 0.5, ACCENT_GRAPE),
     ]))
     return t
 
@@ -543,52 +603,52 @@ def _create_styles():
     styles = getSampleStyleSheet()
 
     styles.add(ParagraphStyle('Brand', parent=styles['Title'],
-        fontSize=26, textColor=ACCENT_BLUE, spaceAfter=4,
-        alignment=TA_CENTER, fontName='Helvetica-Bold', letterSpacing=4))
+        fontSize=30, textColor=ACCENT_PURPLE, spaceAfter=4,
+        alignment=TA_CENTER, fontName='Helvetica-Bold'))
 
     styles.add(ParagraphStyle('BrandSub', parent=styles['Normal'],
-        fontSize=9, textColor=TEXT_MUTED, alignment=TA_CENTER, spaceAfter=0))
+        fontSize=10, textColor=TEXT_MUTED, alignment=TA_CENTER, spaceAfter=0))
 
     styles.add(ParagraphStyle('CoverTitle', parent=styles['Heading1'],
-        fontSize=20, textColor=TEXT_PRIMARY, spaceAfter=14,
+        fontSize=22, textColor=TEXT_PRIMARY, spaceAfter=14,
         alignment=TA_CENTER, fontName='Helvetica-Bold'))
 
     styles.add(ParagraphStyle('ThreatBadge', parent=styles['Normal'],
-        fontSize=11, fontName='Helvetica-Bold', textColor=colors.white,
+        fontSize=12, fontName='Helvetica-Bold', textColor=TEXT_WHITE,
         alignment=TA_CENTER))
 
     styles.add(ParagraphStyle('SectionHeading', parent=styles['Heading2'],
-        fontSize=13, textColor=ACCENT_BLUE, spaceBefore=4, spaceAfter=0,
+        fontSize=14, textColor=ACCENT_PURPLE, spaceBefore=4, spaceAfter=0,
         fontName='Helvetica-Bold'))
 
     styles.add(ParagraphStyle('Body', parent=styles['BodyText'],
-        fontSize=9, leading=14, spaceAfter=4, textColor=TEXT_PRIMARY))
+        fontSize=9, leading=14, spaceAfter=4, textColor=TEXT_BODY))
 
     styles.add(ParagraphStyle('Muted', parent=styles['BodyText'],
         fontSize=9, leading=14, textColor=TEXT_MUTED))
 
     styles.add(ParagraphStyle('Mono', parent=styles['Normal'],
-        fontSize=7, fontName='Courier', leading=9))
+        fontSize=7, fontName='Courier', leading=9, textColor=TEXT_BODY))
 
     styles.add(ParagraphStyle('InsightTitle', parent=styles['BodyText'],
         fontSize=9, fontName='Helvetica-Bold', textColor=TEXT_PRIMARY, leading=13))
 
     styles.add(ParagraphStyle('InsightBody', parent=styles['BodyText'],
-        fontSize=9, leading=14, textColor=TEXT_MUTED))
+        fontSize=9, leading=14, textColor=TEXT_BODY))
 
     styles.add(ParagraphStyle('CalloutTitle', parent=styles['BodyText'],
-        fontSize=9, fontName='Helvetica-Bold', textColor=ACCENT_BLUE, leading=13))
+        fontSize=10, fontName='Helvetica-Bold', textColor=TEXT_WHITE, leading=14))
 
     styles.add(ParagraphStyle('CalloutBody', parent=styles['BodyText'],
-        fontSize=9, leading=14, textColor=TEXT_PRIMARY))
+        fontSize=9, leading=14, textColor=TEXT_BODY))
 
     styles.add(ParagraphStyle('SugTitle', parent=styles['BodyText'],
-        fontSize=9, fontName='Helvetica-Bold', textColor=TEXT_PRIMARY, leading=13))
+        fontSize=9, fontName='Helvetica-Bold', textColor=ACCENT_PURPLE, leading=13))
 
     return styles
 
 
-def _table_style(header_color=ACCENT_BLUE):
+def _table_style(header_color=HEADER_BG):
     return TableStyle([
         ('FONTNAME',       (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE',       (0, 0), (-1, -1), 8),
@@ -596,8 +656,8 @@ def _table_style(header_color=ACCENT_BLUE):
         ('BACKGROUND',     (0, 0), (-1, 0), header_color),
         ('ALIGN',          (0, 0), (-1, -1), 'LEFT'),
         ('VALIGN',         (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING',  (0, 0), (-1, -1), 6),
-        ('TOPPADDING',     (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING',  (0, 0), (-1, -1), 7),
+        ('TOPPADDING',     (0, 0), (-1, -1), 7),
         ('LINEBELOW',      (0, 0), (-1, -1), 0.5, BORDER_COLOR),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, ROW_ALT]),
     ])
