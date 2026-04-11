@@ -786,6 +786,54 @@ def get_analysis_details(analysis_id):
         
     return jsonify(data)
 
+    
+@app.route('/api/forensics/<analysis_id>', methods=['GET'])
+def get_forensic_insights(analysis_id):
+    """
+    Return forensic insight data for the RecordsTable panel.
+    Includes: top features, XAI insights, suggestions, and prediction summary.
+    """
+    if not _valid_analysis_id(analysis_id):
+        return jsonify({'error': 'Invalid analysis ID'}), 400
+
+    record = get_analysis(analysis_id)
+    if not record:
+        return jsonify({'error': 'Analysis not found'}), 404
+
+    predictions = record.get('predictions', [])
+    explanations = record.get('explanations', [])
+    metadata = record.get('metadata', {})
+
+    # Re-generate insights if explanations are missing (e.g. no model at analysis time)
+    if not explanations and predictions:
+        try:
+            from ml.model_manager import load_model
+            from ml.preprocessor import FEATURE_COLUMNS
+            classifier, _, _ = load_model()
+            feature_imp = classifier.get_feature_importances(FEATURE_COLUMNS)
+            top_3 = feature_imp[:3]
+            sample_threat = predictions[0].get('threat_type', 'Unknown') if predictions else 'Unknown'
+            sample_malicious = predictions[0].get('is_malicious', False) if predictions else False
+            generated_insights = generate_insights(top_3, sample_malicious, sample_threat)
+            explanations = [{'top_features': feature_imp[:10], 'insights': generated_insights}]
+        except Exception:
+            pass
+
+    return jsonify({
+        'analysis_id': analysis_id,
+        'filename': record.get('filename', 'unknown'),
+        'status': record.get('status', 'unknown'),
+        'source': record.get('source', 'upload'),
+        'uploaded_at': record.get('uploaded_at', ''),
+        'analyzed_at': record.get('analyzed_at', ''),
+        'total_flows': len(predictions),
+        'identities_created': len(set(record.get('identities_created', []))),
+        'metadata': metadata,
+        'predictions': predictions,
+        'explanations': explanations,
+    })
+
+
 
 # ═════════════════════════════════════════════════════════════════════════
 #  API: PDF REPORT
@@ -847,50 +895,112 @@ def generate_batch_report():
         return jsonify({'error': 'No ids provided'}), 400
         
     analysis_ids = ids_str.split(',')
-    pdf_paths = []
     
-    for aid in analysis_ids:
-        record = get_analysis(aid)
-        if not record: continue
+    if fmt == 'pdf':
+        # Generate a single cumulative report for all ids
+        combined_predictions = []
+        combined_explanations = []
+        total_packets = 0
+        total_identities = set()
+        combined_protocols = {}
+        top_flows = []
+        
+        for aid in analysis_ids:
+            record = get_analysis(aid)
+            if not record: continue
+            
+            combined_predictions.extend(record.get('predictions', []))
+            
+            # Take explanations from the first record that has them, as they characterize the model
+            if not combined_explanations and record.get('explanations'):
+                combined_explanations = record.get('explanations')
+            
+            metadata = record.get('metadata', {})
+            total_packets += metadata.get('total_packets', 0)
+            if 'identities_created' in record:
+                total_identities.update(record['identities_created'])
+                
+            ana_data = record.get('flow_analysis', {})
+            if 'protocol_distribution' in ana_data:
+                for p in ana_data['protocol_distribution']:
+                    proto = p['protocol']
+                    if proto not in combined_protocols:
+                        combined_protocols[proto] = {'packets': 0, 'bytes': 0}
+                    combined_protocols[proto]['packets'] += p['packet_count']
+                    combined_protocols[proto]['bytes'] += p['byte_count']
+            
+            if 'flow_summaries' in ana_data:
+                top_flows.extend(ana_data['flow_summaries'])
+
+        if not combined_predictions and not top_flows:
+            return jsonify({'error': 'Failed to generate combined batch report (No data found)'}), 500
+
+        total_packets_protos = sum(p['packets'] for p in combined_protocols.values())
+        total_bytes_protos = sum(p['bytes'] for p in combined_protocols.values())
+        agg_protocol_dist = []
+        for proto, stats in combined_protocols.items():
+            agg_protocol_dist.append({
+                'protocol': proto,
+                'packet_count': stats['packets'],
+                'byte_count': stats['bytes'],
+                'packet_ratio': stats['packets'] / total_packets_protos if total_packets_protos else 0,
+                'byte_ratio': stats['bytes'] / total_bytes_protos if total_bytes_protos else 0,
+            })
+        agg_protocol_dist.sort(key=lambda x: x['byte_count'], reverse=True)
+        top_flows.sort(key=lambda x: x['total_bytes'], reverse=True)
+        
+        combined_metadata = {
+            'source': f'Cumulative Report ({len(analysis_ids)} Captures)',
+            'total_packets': total_packets,
+            'identities_created': len(total_identities)
+        }
+        
+        combined_analysis_data = {
+            'protocol_distribution': agg_protocol_dist,
+            'flow_summaries': top_flows[:50]
+        }
         
         path = generate_pdf_report(
-            analysis_id=aid,
-            analysis_data=record.get('flow_analysis', {}),
-            predictions=record.get('predictions', []),
-            explanations=record.get('explanations', []),
+            analysis_id="CUMULATIVE_BATCH",
+            analysis_data=combined_analysis_data,
+            predictions=combined_predictions,
+            explanations=combined_explanations,
             topology={},
-            metadata=record.get('metadata', {}),
+            metadata=combined_metadata,
         )
+        
         if path and os.path.exists(path):
-            pdf_paths.append((aid, path))
+            return send_file(path, mimetype='application/pdf', as_attachment=True, download_name='ObsidianLens_Cumulative_Report.pdf')
+        else:
+            return jsonify({'error': 'Failed to generate cumulative batch report'}), 500
             
-    if not pdf_paths:
-        return jsonify({'error': 'Failed to generate any reports'}), 500
-        
-    if fmt == 'pdf':
-        try:
-            from pypdf import PdfWriter
-        except ImportError:
-            return jsonify({'error': 'pypdf not installed. Please pip install pypdf'}), 500
-            
-        merger = PdfWriter()
-        for _, path in pdf_paths:
-            merger.append(path)
-            
-        merged_path = os.path.join(REPORTS_FOLDER, f"BENFET_Merged_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
-        merger.write(merged_path)
-        merger.close()
-        
-        return send_file(merged_path, mimetype='application/pdf', as_attachment=True, download_name='ObsidianLens_Cumulative_Report.pdf')
-        
     else: # format == 'zip'
+        pdf_paths = []
+        for aid in analysis_ids:
+            record = get_analysis(aid)
+            if not record: continue
+            
+            path = generate_pdf_report(
+                analysis_id=aid,
+                analysis_data=record.get('flow_analysis', {}),
+                predictions=record.get('predictions', []),
+                explanations=record.get('explanations', []),
+                topology={},
+                metadata=record.get('metadata', {}),
+            )
+            if path and os.path.exists(path):
+                pdf_paths.append((aid, path))
+
+        if not pdf_paths:
+            return jsonify({'error': 'Failed to generate any reports'}), 500
+            
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
             for aid, path in pdf_paths:
                 zf.write(path, arcname=f"Report_{aid}.pdf")
         memory_file.seek(0)
         
-        return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name='ObsidianLens_Cumulative_Reports.zip')
+        return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name='ObsidianLens_Reports_Archive.zip')
 
 
 @app.route('/api/analysis/clear_all_records', methods=['DELETE'])

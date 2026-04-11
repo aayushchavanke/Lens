@@ -189,7 +189,7 @@ def upsert_identity(src_ip, dst_ip, category, threat_type, confidence,
                 flow_count = flow_count + 1,
                 fingerprint_file = ?
             WHERE id = ?
-        """, (now, confidence, category, threat_type, category, fingerprint_filename, user_id))
+        """, (now, confidence, category, threat_type, fingerprint_filename, user_id))
     else:
         codename = _generate_codename(conn)
 
